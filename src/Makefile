@@ -3,7 +3,7 @@ all: dropwatch
 
 
 dropwatch: *.o 
-	gcc -g -lreadline -o dropwatch main.o
+	gcc -g -D__GNUC__ -lreadline -lnl -o dropwatch main.o
 
 %.o: %.c
 	gcc -g -c $<

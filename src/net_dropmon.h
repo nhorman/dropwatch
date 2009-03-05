@@ -8,25 +8,23 @@ struct net_dm_drop_point {
 	uint32_t count;
 };
 
-typedef enum {
-	NET_DM_CFG_VERSION = 0,
-	NET_DM_CFG_ALERT_COUNT,
-	NET_DM_CFG_ALERT_DELAY,
-	NET_DM_CFG_MAX,
-} config_type_t;
+#define NET_DM_CFG_VERSION  0
+#define NET_DM_CFG_ALERT_COUNT  1
+#define NET_DM_CFG_ALERT_DELAY 2
+#define NET_DM_CFG_MAX 3
 
 struct net_dm_config_entry {
-	config_type_t type;
-	uint64_t data;
+	uint32_t type;
+	uint64_t  data __attribute__((aligned(8)));
 };
 
 struct net_dm_config_msg {
-	size_t entries;
+	uint32_t entries;
 	struct net_dm_config_entry options[0];
 };
 
 struct net_dm_alert_msg {
-	size_t entries;
+	uint32_t entries;
 	struct net_dm_drop_point points[0];
 };
 
@@ -37,18 +35,22 @@ struct net_dm_user_msg {
 	}u;
 };
 
-/*
- * Group names
- */
-#define NET_DM_GRP_ALERTS 1
-
 
 /* These are the netlink message types for this protocol */
 
-#define NET_DM_BASE	0x10 			/* Standard Netlink Messages below this */
-#define NET_DM_ALERT	(NET_DM_BASE + 1) 	/* Alert about dropped packets */
-#define NET_DM_CONFIG	(NET_DM_BASE + 2)	/* Configuration message */
-#define NET_DM_START	(NET_DM_BASE + 3)	/* Start monitoring */
-#define NET_DM_STOP	(NET_DM_BASE + 4)	/* Stop monitoring */
-#define NET_DM_MAX	(NET_DM_BASE + 5)
+enum {
+	NET_DM_CMD_UNSPEC = 0,
+	NET_DM_CMD_ALERT,
+	NET_DM_CMD_CONFIG,
+	NET_DM_CMD_START,
+	NET_DM_CMD_STOP,
+	_NET_DM_CMD_MAX,
+};
+
+#define NET_DM_CMD_MAX (_NET_DM_CMD_MAX - 1)
+
+/*
+ * Our group identifiers
+ */
+#define NET_DM_GRP_ALERT 1
 #endif

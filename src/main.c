@@ -33,6 +33,9 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <asm/types.h>
+#include <netlink/netlink.h>
+#include <netlink/genl/genl.h>
+#include <netlink/genl/ctrl.h>
 
 #include "net_dropmon.h"
 
@@ -43,28 +46,35 @@
 #define NETLINK_DRPMON 20
 #endif
 
-#define RX_BUF_SIZE 4096
 
 struct netlink_message {
-	struct nlmsghdr *msg;
+	void *msg;
+	struct nl_msg *nlbuf;
 	int refcnt;
+	int seq;
+	void (*ack_cb)(struct netlink_message *amsg, struct netlink_message *msg, int err);
+	struct netlink_message *next;
+	struct netlink_message *prev;
 };
+
+struct netlink_message *head;
 
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_config_msg(struct netlink_message *msg, int err);
-void handle_dm_start_msg(struct netlink_message *msg, int err);
-void handle_dm_stop_msg(struct netlink_message *msg, int err);
+void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
+void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 
 
-static void(*type_cb[NET_DM_MAX])(struct netlink_message *, int err) = {
+static void(*type_cb[_NET_DM_CMD_MAX])(struct netlink_message *, int err) = {
 	NULL,
 	handle_dm_alert_msg,
 	handle_dm_config_msg,
-	handle_dm_start_msg,
-	handle_dm_stop_msg
+	NULL,
+	NULL
 };
 
-static int nsd;
+static struct nl_handle *nsd;
+static int nsf;
 
 enum {
 	STATE_IDLE = 0,
@@ -90,35 +100,39 @@ void sigint_handler(int signum)
 	return;	
 }
 
-int setup_netlink_socket()
+struct nl_handle *setup_netlink_socket()
 {
-	int sd;
-	struct sockaddr_nl nls;
+	struct nl_handle *sd;
+	int family;
 
-	sd = socket(AF_NETLINK, SOCK_DGRAM, NETLINK_DRPMON);
+	
+	sd = nl_handle_alloc();
 
-	if (sd < 0) {
-		perror("Unable to open socket:");
-		return sd;
-	}
+	genl_connect(sd);
 
-	/*
- 	 * Bind us to the first group so that we get alert messages
- 	 */
-	memset(&nls, 0, sizeof(nls));
-	nls.nl_family = AF_NETLINK;
-	nls.nl_groups = NET_DM_GRP_ALERTS;
+	family = genl_ctrl_resolve(sd, "NET_DM");
 
-	if (bind(sd, (const struct sockaddr *)&nls, sizeof(struct sockaddr_nl)) < 0) {
-		perror("Unable to bind to alerting group:");
+	if (family < 0) {
+		printf("Unable to find NET_DM family, dropwatch can't work\n");
 		goto out_close;
 	}
+
+	nsf = family;
+
+	nl_close(sd);
+	nl_handle_destroy(sd);
+
+	sd = nl_handle_alloc();
+	nl_join_groups(sd, NET_DM_GRP_ALERT);
+
+	nl_connect(sd, NETLINK_GENERIC);
 
 	return sd;
 
 out_close:
-	close(sd);
-	return -1;
+	nl_close(sd);
+	nl_handle_destroy(sd);
+	return NULL;
 
 }
 
@@ -132,22 +146,37 @@ struct netlink_message *alloc_netlink_msg(uint32_t type, uint16_t flags, size_t 
 	size = NLMSG_LENGTH(size);
 
 
-	msg = (struct netlink_message *)malloc(size);
+	msg = (struct netlink_message *)malloc(sizeof(struct netlink_message));
 
 	if (!msg)
 		return NULL;
 
 	msg->refcnt = 1;
-	msg->msg = (struct nlmsghdr *)((char *)msg+NLMSG_ALIGN(sizeof(struct netlink_message)));
-	msg->msg->nlmsg_len = size;
-	msg->msg->nlmsg_type = type;
-	msg->msg->nlmsg_flags = flags;
-	msg->msg->nlmsg_seq = seq++;
-	msg->msg->nlmsg_pid = 0;
+	msg->nlbuf = nlmsg_alloc(); 
+	msg->msg = genlmsg_put(msg->nlbuf, 0, seq, nsf, size, flags, type, 1);
+
+	msg->ack_cb = NULL;
+	msg->next = msg->prev = NULL;
+	msg->seq = seq++;
 
 	return msg;
 }
 
+void set_ack_cb(struct netlink_message *msg,
+			void (*cb)(struct netlink_message *, struct netlink_message *, int))
+{
+	if (head == NULL)
+		head = msg;
+	else {
+		msg->next = head;
+		head = msg;
+		msg->next->prev = msg;
+	}
+
+	msg->ack_cb = cb;
+}
+
+		
 struct netlink_message *wrap_netlink_msg(struct nlmsghdr *buf)
 {
 	struct netlink_message *msg;
@@ -156,6 +185,7 @@ struct netlink_message *wrap_netlink_msg(struct nlmsghdr *buf)
 	if (msg) {
 		msg->refcnt = 1;
 		msg->msg = buf;
+		msg->nlbuf = NULL;
 	}
 
 	return msg;
@@ -169,28 +199,36 @@ int free_netlink_msg(struct netlink_message *msg)
 
 	refcnt = msg->refcnt;
 
-	if (!refcnt)
+	if (!refcnt) {
+		if (msg->nlbuf)
+			nlmsg_free(msg->nlbuf);
+		else
+			free(msg->msg);
 		free(msg);
+	}
 
 	return refcnt;
 }
 
 int send_netlink_message(struct netlink_message *msg)
 {
-	return send(nsd, msg->msg, msg->msg->nlmsg_len, 0);
+	return nl_send(nsd, msg->nlbuf);
 }
 
 struct netlink_message *recv_netlink_message(int *err)
 {
-	static char buf[RX_BUF_SIZE];
+	static unsigned char *buf;
 	struct netlink_message *msg;
+	struct genlmsghdr *glm;
+	struct sockaddr_nl nla;
 	int type;
 	int rc;
 
 	*err = 0;
+restart:
 	printf("Trying to get a netlink msg\n");
 	do {
-		rc = recv(nsd, buf, RX_BUF_SIZE, 0);
+		rc = nl_recv(nsd, &nla, &buf, NULL);
 		printf("Got a netlink message\n");
 		if (rc < 0) {	
 			switch (errno) {
@@ -210,22 +248,38 @@ struct netlink_message *recv_netlink_message(int *err)
 
 	msg = wrap_netlink_msg((struct nlmsghdr *)buf);
 
-	type = msg->msg->nlmsg_type;
+	type = ((struct nlmsghdr *)msg->msg)->nlmsg_type;
 
 	/*
 	 * Note the NLMSG_ERROR is overloaded
 	 * Its also used to deliver ACKs
 	 */
 	if (type == NLMSG_ERROR) {
-		struct nlmsgerr *ermsg;
-		ermsg = NLMSG_DATA(msg->msg);
-		msg->msg = &ermsg->msg;
-		*err = ermsg->error;
-		type = msg->msg->nlmsg_type;
+		struct netlink_message *am;
+		struct nlmsgerr *errm = nlmsg_data(msg->msg);
+		am = head;
+		while (am != NULL) {
+			if (am->seq == errm->msg.nlmsg_seq) {
+				if (am->prev != NULL)
+					am->prev->next = am->next;
+				if (am->next != NULL)
+					am->next->prev = am->prev;
+				if ((am->next == NULL) && (am->prev == NULL))
+					head = NULL;
+				am->ack_cb(msg, am, errm->error);
+				break;
+			}
+		}
+		free_netlink_msg(am);
+		free_netlink_msg(msg);
+		return NULL;
 	}
-		
-	if ((type >= NET_DM_MAX) ||
-	    (type <= NET_DM_BASE)) {
+
+	glm = nlmsg_data(msg->msg);
+	type = glm->cmd;
+	
+	if ((type > NET_DM_CMD_MAX) ||
+	    (type <= NET_DM_CMD_UNSPEC)) {
 		printf("Received message of unknown type %d\n", 
 			type);
 		free_netlink_msg(msg);
@@ -239,11 +293,16 @@ void process_rx_message(void)
 {
 	struct netlink_message *msg;
 	int err;
+	int type;
 
 	msg = recv_netlink_message(&err);
 
-	if (msg)
-		type_cb[msg->msg->nlmsg_type-NET_DM_BASE](msg, err);
+	if (msg) {
+		struct nlmsghdr *nlh = msg->msg;
+		struct genlmsghdr *glh = nlmsg_data(nlh);
+		type  = glh->cmd; 
+		type_cb[type](msg, err);
+	}
 	return;
 }
 
@@ -255,7 +314,13 @@ void process_rx_message(void)
 void handle_dm_alert_msg(struct netlink_message *msg, int err)
 {
 	int i;
-	struct net_dm_alert_msg *alert = NLMSG_DATA(msg->msg);
+	struct nlmsghdr *nlh = msg->msg;
+	struct genlmsghdr *glh = nlmsg_data(nlh);
+
+	struct net_dm_alert_msg *alert = genlmsg_data(glh);
+
+	if (state != STATE_RECEIVING)
+		goto out_free;
 
 	printf("Got Drop notifications\n");
 
@@ -266,6 +331,7 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 		printf ("%d drops at location %p\n", alert->points[i].count, location);
 	}	
 
+out_free:
 	free_netlink_msg(msg);
 }
 
@@ -274,10 +340,11 @@ void handle_dm_config_msg(struct netlink_message *msg, int err)
 	printf("Got a config message\n");
 }
 
-void handle_dm_start_msg(struct netlink_message *msg, int err)
+void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err)
 {
 	if (err != 0) {
-		printf("Failed activation request, error = %d\n", err);
+		char *erm = strerror(err*-1);
+		printf("Failed activation request, error: %s\n", erm);
 		state = STATE_FAILED;
 		goto out;
 	}
@@ -302,26 +369,32 @@ out:
 	return;
 }
 
-void handle_dm_stop_msg(struct netlink_message *msg, int err)
+void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *msg, int err)
 {
 	printf("Got a stop message\n");
 	if (err == 0)
 		state = STATE_IDLE;
+	free_netlink_msg(msg);
 }
 
 int enable_drop_monitor()
 {
 	struct netlink_message *msg;
 
-	msg = alloc_netlink_msg(NET_DM_START, NLM_F_REQUEST|NLM_F_ACK, 0);
+	msg = alloc_netlink_msg(NET_DM_CMD_START, NLM_F_REQUEST|NLM_F_ACK, 0);
 
+	set_ack_cb(msg, handle_dm_start_msg);
+	
 	return send_netlink_message(msg);
 }
 
 int disable_drop_monitor()
 {
 	struct netlink_message *msg;
-	msg = alloc_netlink_msg(NET_DM_STOP, NLM_F_REQUEST|NLM_F_ACK, 0);
+
+	msg = alloc_netlink_msg(NET_DM_CMD_STOP, NLM_F_REQUEST|NLM_F_ACK, 0);
+
+	set_ack_cb(msg, handle_dm_stop_msg);
 
 	return send_netlink_message(msg);
 }
@@ -335,6 +408,11 @@ void enter_command_line_mode()
 
 		if (!strcmp(input,"start")) {
 			state = STATE_RQST_ACTIVATE;
+			break;
+		}
+
+		if (!strcmp(input, "stop")) {
+			state = STATE_RQST_DEACTIVATE;
 			break;
 		}
 
@@ -416,7 +494,7 @@ int main (int argc, char **argv)
 	 */
 	nsd = setup_netlink_socket();
 
-	if (nsd < 1) {
+	if (nsd == NULL) {
 		printf("Cleaning up on socket creation error\n");
 		goto out;
 	}
@@ -424,6 +502,7 @@ int main (int argc, char **argv)
 
 	enter_state_loop();
 	printf("Shutting down ...\n");
+done:
 	close(nsd);
 	exit(0);
 out:
