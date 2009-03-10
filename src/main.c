@@ -60,6 +60,9 @@ LIST_HEAD(ack_list, netlink_message);
 
 struct ack_list ack_list_head = {NULL};
 
+unsigned long alimit = 0;
+unsigned long acount = 0;
+
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_config_msg(struct netlink_message *msg, int err);
 void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
@@ -225,6 +228,7 @@ struct netlink_message *recv_netlink_message(int *err)
 restart:
 	do {
 		rc = nl_recv(nsd, &nla, &buf, NULL);
+		printf("nl_recv returned %d\n", rc);
 		if (rc < 0) {	
 			switch (errno) {
 			case EINTR:
@@ -322,6 +326,11 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 		void *location;
 		memcpy(&location, alert->points[i].pc, sizeof(void *));
 		printf ("%d drops at location %p\n", alert->points[i].count, location);
+		acount++;
+		if (alimit && (acount == alimit)) {
+			printf("Alert limit reached, deactivating!\n");
+			state = STATE_RQST_DEACTIVATE;
+		}
 	}	
 
 out_free:
@@ -394,6 +403,17 @@ int disable_drop_monitor()
 	return send_netlink_message(msg);
 }
 
+void display_help()
+{
+	printf("Command Syntax:\n");
+	printf("exit\t\t\t\t - Quit dropwatch\n");
+	printf("help\t\t\t\t - Display this message\n");
+	printf("set:\n");
+	printf("\talertlimit <number>\t - caputre only this many alert packets\n");
+	printf("start\t\t\t\t - start capture\n");
+	printf("stop\t\t\t\t - stop capture\n");
+}
+
 void enter_command_line_mode()
 {
 	char *input;
@@ -416,8 +436,25 @@ void enter_command_line_mode()
 			break;
 		}
 
+		if (!strcmp (input, "help")) {
+			display_help();
+			goto next_input;
+		}
+
+		if (!strncmp(input, "set", 3)) {
+			char *ninput = input+4;
+			if (!strncmp(ninput, "alertlimit", 10)) {
+				alimit = strtoul(ninput+10, NULL, 10);
+				printf("setting alert capture limit to %d\n",
+					alimit);
+				goto next_input;
+			}
+		}
+next_input:
 		free(input);
 	} while(1);
+
+	free(input);
 }
 
 void enter_state_loop(void)
