@@ -30,6 +30,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/queue.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <asm/types.h>
@@ -46,18 +47,18 @@
 #define NETLINK_DRPMON 20
 #endif
 
-
 struct netlink_message {
 	void *msg;
 	struct nl_msg *nlbuf;
 	int refcnt;
+	LIST_ENTRY(netlink_message) ack_list_element;
 	int seq;
 	void (*ack_cb)(struct netlink_message *amsg, struct netlink_message *msg, int err);
-	struct netlink_message *next;
-	struct netlink_message *prev;
 };
 
-struct netlink_message *head;
+LIST_HEAD(ack_list, netlink_message);
+
+struct ack_list ack_list_head = {NULL};
 
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_config_msg(struct netlink_message *msg, int err);
@@ -88,7 +89,6 @@ enum {
 };
 
 static int state = STATE_IDLE;
-
 
 void sigint_handler(int signum)
 {
@@ -156,7 +156,6 @@ struct netlink_message *alloc_netlink_msg(uint32_t type, uint16_t flags, size_t 
 	msg->msg = genlmsg_put(msg->nlbuf, 0, seq, nsf, size, flags, type, 1);
 
 	msg->ack_cb = NULL;
-	msg->next = msg->prev = NULL;
 	msg->seq = seq++;
 
 	return msg;
@@ -165,15 +164,13 @@ struct netlink_message *alloc_netlink_msg(uint32_t type, uint16_t flags, size_t 
 void set_ack_cb(struct netlink_message *msg,
 			void (*cb)(struct netlink_message *, struct netlink_message *, int))
 {
-	if (head == NULL)
-		head = msg;
-	else {
-		msg->next = head;
-		head = msg;
-		msg->next->prev = msg;
-	}
+
+	if (msg->ack_cb)
+		return;
 
 	msg->ack_cb = cb;
+	msg->refcnt++;
+	LIST_INSERT_HEAD(&ack_list_head, msg, ack_list_element);
 }
 
 		
@@ -226,10 +223,8 @@ struct netlink_message *recv_netlink_message(int *err)
 
 	*err = 0;
 restart:
-	printf("Trying to get a netlink msg\n");
 	do {
 		rc = nl_recv(nsd, &nla, &buf, NULL);
-		printf("Got a netlink message\n");
 		if (rc < 0) {	
 			switch (errno) {
 			case EINTR:
@@ -257,20 +252,19 @@ restart:
 	if (type == NLMSG_ERROR) {
 		struct netlink_message *am;
 		struct nlmsgerr *errm = nlmsg_data(msg->msg);
-		am = head;
-		while (am != NULL) {
-			if (am->seq == errm->msg.nlmsg_seq) {
-				if (am->prev != NULL)
-					am->prev->next = am->next;
-				if (am->next != NULL)
-					am->next->prev = am->prev;
-				if ((am->next == NULL) && (am->prev == NULL))
-					head = NULL;
-				am->ack_cb(msg, am, errm->error);
+		LIST_FOREACH(am, &ack_list_head, ack_list_element) {
+			if (am->seq == errm->msg.nlmsg_seq)
 				break;
-			}
 		}
-		free_netlink_msg(am);
+	
+		if (am) {	
+			LIST_REMOVE(am, ack_list_element);
+			am->ack_cb(msg, am, errm->error);
+			free_netlink_msg(am);
+		} else {
+			printf("Got an unexpected ack for sequence %d\n", errm->msg.nlmsg_seq);
+		}
+
 		free_netlink_msg(msg);
 		return NULL;
 	}
@@ -322,7 +316,6 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 	if (state != STATE_RECEIVING)
 		goto out_free;
 
-	printf("Got Drop notifications\n");
 
 
 	for (i=0; i < alert->entries; i++) {
@@ -366,6 +359,7 @@ void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *m
 	}
 out:
 	free_netlink_msg(msg);
+	free_netlink_msg(amsg);
 	return;
 }
 
@@ -375,6 +369,7 @@ void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *ms
 	if (err == 0)
 		state = STATE_IDLE;
 	free_netlink_msg(msg);
+	free_netlink_msg(amsg);
 }
 
 int enable_drop_monitor()
