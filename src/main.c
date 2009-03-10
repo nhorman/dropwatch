@@ -228,7 +228,6 @@ struct netlink_message *recv_netlink_message(int *err)
 restart:
 	do {
 		rc = nl_recv(nsd, &nla, &buf, NULL);
-		printf("nl_recv returned %d\n", rc);
 		if (rc < 0) {	
 			switch (errno) {
 			case EINTR:
@@ -292,8 +291,13 @@ void process_rx_message(void)
 	struct netlink_message *msg;
 	int err;
 	int type;
+	sigset_t bs;
 
+	sigemptyset(&bs);
+	sigaddset(&bs, SIGINT);
+	sigprocmask(SIG_UNBLOCK, &bs, NULL);
 	msg = recv_netlink_message(&err);
+	sigprocmask(SIG_BLOCK, &bs, NULL);
 
 	if (msg) {
 		struct nlmsghdr *nlh = msg->msg;
@@ -493,7 +497,7 @@ void enter_state_loop(void)
 				state = STATE_FAILED;
 			} else
 				state = STATE_DEACTIVATING;
-
+			should_rx = 1;
 			break;
 		case STATE_DEACTIVATING:
 			printf("Waiting for deactivation ack...\n");
