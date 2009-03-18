@@ -1,7 +1,7 @@
 Summary: Kernel dropped packet monitor 
 Name: dropwatch 
-Version: 1.0
-Release: 1%{?dist} 
+Version: MAKEFILE_VERSION 
+Release: MAKEFILE_RELEASE%{?dist} 
 Source0: https://fedorahosted.org/releases/d/r/dropwatch/dropwatch-%{version}.tbz2
 URL: http://fedorahosted.org/dropwatch
 License: GPLv2 
@@ -21,7 +21,9 @@ cd src
 make
 
 %install
-cd src
+rm -rf $RPM_BUILD_ROOT
+mkdir -p $RPM_BUILD_ROOT/usr/bin
+install -m0755 src/dropwatch $RPM_BUILD_ROOT/usr/bin
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -30,9 +32,8 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(-,root,root,-)
 %{_bindir}/*
-%{_mandir}/man1/*
 
 %changelog
-Tue Mar 17 2009 Neil Horman <nhorman@redhat.com> 1.0-1
+* Tue Mar 17 2009 Neil Horman <nhorman@redhat.com> 1.0-1
 - Initial build
 
