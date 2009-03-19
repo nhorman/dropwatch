@@ -23,7 +23,9 @@ make
 %install
 rm -rf $RPM_BUILD_ROOT
 mkdir -p $RPM_BUILD_ROOT/usr/bin
+mkdir -p $RPM_BUILD_ROOT/usr/share/man/man1
 install -m0755 src/dropwatch $RPM_BUILD_ROOT/usr/bin
+install -m0644 doc/dropwatch.1 $RPM_BUILD_ROOT/usr/share/man/man1
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -32,6 +34,9 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(-,root,root,-)
 %{_bindir}/*
+%{_mandir}/man1/*
+%doc README
+%doc COPYING
 
 %changelog
 * Tue Mar 17 2009 Neil Horman <nhorman@redhat.com> 1.0-1
