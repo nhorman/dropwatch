@@ -1,0 +1,29 @@
+.PU
+.TH dropwatch "1" "Mar 2009" "Neil Horman"
+.SH NAME
+dropwatch - kernel dropped packet monitoring utility 
+.SH SYNOPSIS
+.B dropwatch 
+.SH DESCRIPTION
+.I dropwatch 
+dropwatch is an interactive utility for monitoring and recording packets that
+are dropped by the kernel
+.SH OPTIONS  
+Currently dropwatch supports no command line options, but will shortly.
+.SH INTERACTIVE COMMANDS
+.TP
+.B START
+Tells the kernel to start reporting dropped packets
+.TP
+.B STOP
+Tells the kernel to discontinue reporting dropped packets
+.TP
+.B EXIT
+Exits the dropmonitor program
+.TP
+.B HELP
+Displays summary of all commands
+.TP
+.B SET ALERTLIMIT <value>
+Sets a triggerpoint to stop monitoring for dropped packets after <value> alerts
+have been received
