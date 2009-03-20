@@ -1,5 +1,5 @@
 REL_VERSION:=1.0
-REL_RELEASE:=1
+REL_RELEASE:=2
 ROOT_DIR=$(shell pwd)
 
 release: tarball 

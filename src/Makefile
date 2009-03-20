@@ -1,12 +1,11 @@
-
 all: dropwatch
-
+CFLAGS+=-c
 
 dropwatch: *.o 
-	gcc -g -D__GNUC__ -lreadline -lnl -o dropwatch main.o
+	gcc -g -lreadline -lnl -o dropwatch main.o
 
 %.o: %.c
-	gcc -g -c $<
+	gcc $(CFLAGS) $<
 clean:
 	rm -f dropwatch *.o
 
