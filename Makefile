@@ -2,6 +2,9 @@ REL_VERSION:=1.0
 REL_RELEASE:=2
 ROOT_DIR=$(shell pwd)
 
+rel-upload: release
+	scp $(ROOT_DIR)/stage/dropwatch-$(REL_VERSION).tbz2 fedorahosted.org:dropwatch
+
 release: tarball 
 
 tarball:
