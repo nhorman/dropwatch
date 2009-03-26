@@ -25,6 +25,7 @@
  * 2) /proc/kallsyms
  */
 #include <stdlib.h>
+#include <bfd.h>
 
 #include "lookup.h"
 
@@ -33,22 +34,23 @@ struct lookup_methods {
 };
 
 
-static int bfd_init(void)
+static int lookup_bfd_init(void)
 {
+	bfd_init();
 	return 0;
 }
 
-static int kas_init(void)
+static int lookup_kas_init(void)
 {
 	return 0;
 }
 
 static struct lookup_methods bfd_methods = {
-	bfd_init
+	lookup_bfd_init
 };
 
 static struct lookup_methods kallsym_methods = {
-	kas_init
+	lookup_kas_init
 };
 
 static struct lookup_methods *methods = NULL;

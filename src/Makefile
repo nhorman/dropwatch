@@ -1,8 +1,9 @@
 all: dropwatch
-CFLAGS+=-c
+CFLAGS+=-c -g
+LDFLAGS=-lbfd -lreadline -lnl
 
 dropwatch: main.o lookup.o 
-	gcc -g -lreadline -lnl -o dropwatch main.o lookup.o
+	gcc -g -o dropwatch main.o lookup.o $(LDFLAGS) 
 
 %.o: %.c
 	gcc $(CFLAGS) $<
