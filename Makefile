@@ -1,5 +1,5 @@
 REL_VERSION:=1.0
-REL_RELEASE:=2
+REL_RELEASE:=3
 ROOT_DIR=$(shell pwd)
 
 rel-upload: release
@@ -10,7 +10,7 @@ release: tarball
 tarball:
 	mkdir -p stage 
 	ln -s $(ROOT_DIR) stage/dropwatch-$(REL_VERSION)
-	tar jchf $(ROOT_DIR)/stage/dropwatch-$(REL_VERSION).tbz2 --exclude \.git --exclude stage -C stage dropwatch-$(REL_VERSION)/
+	tar jchf $(ROOT_DIR)/stage/dropwatch-$(REL_VERSION)-$(REL_RELEASE).tbz2 --exclude \.git --exclude stage -C stage dropwatch-$(REL_VERSION)/
 	mv $(ROOT_DIR)/stage/*.tbz2 $(ROOT_DIR)
 	rm -rf stage
 
@@ -35,4 +35,7 @@ build:
 
 build_clean:
 	make -c src clean
+
+tag:
+	git tag -s -u $(GIT_AUTHOR_EMAIL) -m"Tag V$(REL_VERSION)-$(REL_RELEASE)")
 

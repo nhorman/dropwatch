@@ -1,8 +1,10 @@
+%define uversion MAKEFILE_VERSION
+%define urelease MAKEFILE_RELEASE
 Summary: Kernel dropped packet monitor 
 Name: dropwatch 
-Version: MAKEFILE_VERSION 
-Release: MAKEFILE_RELEASE%{?dist} 
-Source0: https://fedorahosted.org/releases/d/r/dropwatch/dropwatch-%{version}.tbz2
+Version: %{uversion} 
+Release: %{urelease}%{?dist} 
+Source0: https://fedorahosted.org/releases/d/r/dropwatch/dropwatch-%{uversion}-%{urelease}.tbz2
 URL: http://fedorahosted.org/dropwatch
 License: GPLv2+ 
 Group: Applications/System 
@@ -41,6 +43,9 @@ rm -rf $RPM_BUILD_ROOT
 %doc COPYING
 
 %changelog
+* Thu Mar 26 2009 Neil Horman <nhorman@redhat.com> 1.0-3
+- Updating Makefile to include release num in tarball
+
 * Fri Mar 20 2009 Neil Horman <nhorman@redhat.com> 1.0-2
 - Fixed up Errors found in package review (bz 491240)
 
