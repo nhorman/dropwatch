@@ -1,8 +1,8 @@
 all: dropwatch
 CFLAGS+=-c
 
-dropwatch: *.o 
-	gcc -g -lreadline -lnl -o dropwatch main.o
+dropwatch: main.o lookup.o 
+	gcc -g -lreadline -lnl -o dropwatch main.o lookup.o
 
 %.o: %.c
 	gcc $(CFLAGS) $<
