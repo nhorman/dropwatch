@@ -40,5 +40,6 @@ tag:
 	git tag -s -u $(GIT_AUTHOR_EMAIL) -m"Tag V$(REL_VERSION)-$(REL_RELEASE)" V$(REL_VERSION)-$(REL_RELEASE)
 
 upload:
-	git push --tags ssh://git.fedorahosted.org/git/dropwatch.git
+	git push --all --all ssh://git.fedorahosted.org/git/dropwatch.git
+	git push --tags --all ssh://git.fedorahosted.org/git/dropwatch.git
 
