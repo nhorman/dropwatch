@@ -39,6 +39,7 @@
 #include <netlink/genl/ctrl.h>
 
 #include "net_dropmon.h"
+#include "lookup.h"
 
 /*
  * This is just in place until the kernel changes get comitted
@@ -535,6 +536,11 @@ int main (int argc, char **argv)
 		goto out;
 	}
 
+
+	/*
+ 	 * Initalize our lookup library
+ 	 */
+	init_lookup(METHOD_AUTO);
 
 	enter_state_loop();
 	printf("Shutting down ...\n");
