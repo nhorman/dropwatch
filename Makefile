@@ -39,7 +39,7 @@ build_clean:
 tag:
 	git tag -s -u $(GIT_AUTHOR_EMAIL) -m"Tag V$(REL_VERSION)-$(REL_RELEASE)" V$(REL_VERSION)-$(REL_RELEASE)
 
-upload:
+git-upload:
 	git push --all ssh://git.fedorahosted.org/git/dropwatch.git
 	git push --tags ssh://git.fedorahosted.org/git/dropwatch.git
 
