@@ -35,52 +35,8 @@
 
 #include "lookup.h"
 
-struct lookup_methods {
-	int (*lookup_init)(void);
-};
-
-
-static int lookup_bfd_init(void)
-{
-	struct utsname uts;
-	struct stat sb;
-	char *dbibuf;
-
-	/*
- 	 * Start by determining if we have the required debuginfo package here
- 	 */
-	if (uname(&uts) < 0)
-		return -1;
-
-	dbibuf = malloc(strlen("/usr/lib/debug/lib/modules")+strlen(uts.release)+1);
-	sprintf(dbibuf, "/usr/lib/debug/lib/modules/%s\0", uts.release);
-	if (stat(dbibuf, &sb) < 0) {
-		free(dbibuf);
-		goto out_fail;
-	}
-
-	free(dbibuf);
-
-
-	bfd_init();
-	return 0;
-
-out_fail:
-	return -1;	
-}
-
-static int lookup_kas_init(void)
-{
-	return 0;
-}
-
-static struct lookup_methods bfd_methods = {
-	lookup_bfd_init
-};
-
-static struct lookup_methods kallsym_methods = {
-	lookup_kas_init
-};
+extern struct lookup_methods bfd_methods;
+extern struct lookup_methods kallsym_methods;
 
 static struct lookup_methods *methods = NULL;
 
@@ -109,4 +65,9 @@ int init_lookup(lookup_init_method_t method)
 	if (rc < 0)
 		methods = NULL;
 	return rc;
+}
+
+char *lookup_symbol(void *pc)
+{
+	return methods->get_symbol(pc);
 }
