@@ -36,7 +36,8 @@
 
 struct symbol_entry {
 	char *sym_name;
-	unsigned long long location;
+	__u64 start;
+	__u64 end;
 	LIST_ENTRY(symbol_entry) list;
 };
 
@@ -47,6 +48,84 @@ LIST_HEAD(sym_list, symbol_entry);
  */ 
 static struct sym_list sym_list_head = {NULL}; 
 
+
+static int lookup_kas_cache(void *pc, struct loc_result *location)
+{
+	struct symbol_entry *sym;
+	
+	__u64 val = (__u64) pc;
+
+	LIST_FOREACH(sym, &sym_list_head, list) {
+		if ((val >= sym->start) &&
+		    (val <= sym->end)) {
+			location->symbol = sym->sym_name;
+			location->offset = (val - sym->start);
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+static void kas_add_cache(__u64 start, __u64 end, char *name)
+{
+	struct symbol_entry *sym = NULL;
+
+	sym = malloc(sizeof(struct symbol_entry));
+	if (!sym)
+		return;
+
+	sym->start = start;
+	sym->end = end;
+	sym->sym_name = strdup(name);
+
+	LIST_INSERT_HEAD(&sym_list_head, sym, list);
+	return;
+}
+
+static int lookup_kas_proc(void *pc, struct loc_result *location)
+{
+	FILE *pf;
+	void *ppc;
+	__u64 uppc, ulpc, uipc;
+	char *name, *last_name;
+
+	pf = fopen("/proc/kallsyms", "r");
+
+	if (!pf)
+		return 1;
+
+	ulpc == 0;
+	last_name = NULL;
+	uipc = (__u64)pc;
+	while (!feof(pf)) {
+		fscanf(pf, "%p %*s %as %*s", &ppc, &name);
+		uppc = (__u64)ppc;
+		if ((uipc >= ulpc) &&
+		    (uipc < uppc)) {
+			/*
+ 			 * The last symbol we looked at
+ 			 * was a hit, record and return it
+ 			 */
+			kas_add_cache(ulpc, uipc-1, last_name);
+			free(last_name);
+			fclose(pf);
+			return lookup_kas_cache(pc, location);
+		} 
+
+		/*
+ 		 * Advance all our state holders
+ 		 */
+		if (!last_name)
+			free(last_name);
+		last_name = name;
+		ulpc = uppc;
+	}
+
+	fclose(pf);
+	return 1;
+}
+
 static int lookup_kas_init(void)
 {
 	printf("Initalizing kallsyms db\n");
@@ -55,9 +134,12 @@ static int lookup_kas_init(void)
 }
 
 
-static char *lookup_kas_sym(void *pc)
+static int lookup_kas_sym(void *pc, struct loc_result *location)
 {
-	return NULL;
+	if (!lookup_kas_cache(pc, location))
+		return 0;
+
+	return lookup_kas_proc(pc, location);
 }
 
 struct lookup_methods kallsym_methods = {

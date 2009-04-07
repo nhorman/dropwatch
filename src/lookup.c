@@ -67,7 +67,9 @@ int init_lookup(lookup_init_method_t method)
 	return rc;
 }
 
-char *lookup_symbol(void *pc)
+int lookup_symbol(void *pc, struct loc_result *loc)
 {
-	return methods->get_symbol(pc);
+	if (loc == NULL)
+		return 1;
+	return methods->get_symbol(pc, loc);
 }

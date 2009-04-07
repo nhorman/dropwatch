@@ -25,6 +25,8 @@
  * 2) /proc/kallsyms
  */
 
+#include <stdlib.h>
+#include <asm/types.h>
 
 
 /*
@@ -44,12 +46,17 @@ typedef enum {
 	METHOD_KALSYMS
 } lookup_init_method_t;
 
-int init_lookup(lookup_init_method_t method);
+struct loc_result {
+	const char *symbol;
+	__u64 offset;
+};
 
+int init_lookup(lookup_init_method_t method);
+int lookup_symbol(void *pc, struct loc_result *location);
 
 struct lookup_methods {
         int (*lookup_init)(void);
-	char *(*get_symbol)(void *pc);
+	int(*get_symbol)(void *pc, struct loc_result *location);
 };
 
 

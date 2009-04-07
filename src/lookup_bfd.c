@@ -64,9 +64,9 @@ out_fail:
 	return-1;
 }
 
-static char *lookup_bfd_sym(void *pc)
+static int lookup_bfd_sym(void *pc, struct loc_result *location)
 {
-	return NULL;
+	return 1;
 }
 
 struct lookup_methods bfd_methods = {
