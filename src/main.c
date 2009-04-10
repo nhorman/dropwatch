@@ -318,7 +318,7 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 	int i;
 	struct nlmsghdr *nlh = msg->msg;
 	struct genlmsghdr *glh = nlmsg_data(nlh);
-
+	struct loc_result res;
 	struct net_dm_alert_msg *alert = genlmsg_data(glh);
 
 	if (state != STATE_RECEIVING)
@@ -329,7 +329,10 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 	for (i=0; i < alert->entries; i++) {
 		void *location;
 		memcpy(&location, alert->points[i].pc, sizeof(void *));
-		printf ("%d drops at location %p\n", alert->points[i].count, location);
+		if (lookup_symbol(location, &res))
+			printf ("%d drops at location %p\n", alert->points[i].count, location);
+		else
+			printf ("%d drops at %s+%x\n",res.symbol, res.offset);
 		acount++;
 		if (alimit && (acount == alimit)) {
 			printf("Alert limit reached, deactivating!\n");
