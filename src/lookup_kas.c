@@ -19,7 +19,7 @@
 
 /*
  * This is a translator.  given an input address, this will convert it into a
- * symbollic name using /proc/kallsyms
+ * symbolic name using /proc/kallsyms
  */
 
 #include <stdlib.h>

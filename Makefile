@@ -31,6 +31,7 @@ clean:
 	rm -rf BUILD
 	rm -rf RPMS
 	rm -rf stage
+	make -C src clean 
 
 build:
 	make -C src all 
