@@ -49,17 +49,15 @@ LIST_HEAD(sym_list, symbol_entry);
 static struct sym_list sym_list_head = {NULL}; 
 
 
-static int lookup_kas_cache(void *pc, struct loc_result *location)
+static int lookup_kas_cache( __u64 pc, struct loc_result *location)
 {
 	struct symbol_entry *sym;
-	
-	__u64 val = (__u64) pc;
 
 	LIST_FOREACH(sym, &sym_list_head, list) {
-		if ((val >= sym->start) &&
-		    (val <= sym->end)) {
+		if ((pc >= sym->start) &&
+		    (pc <= sym->end)) {
 			location->symbol = sym->sym_name;
-			location->offset = (val - sym->start);
+			location->offset = (pc - sym->start);
 			return 0;
 		}
 	}
@@ -83,10 +81,10 @@ static void kas_add_cache(__u64 start, __u64 end, char *name)
 	return;
 }
 
-static int lookup_kas_proc(void *pc, struct loc_result *location)
+static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 {
 	FILE *pf;
-	void *ppc;
+	__u64 ppc;
 	__u64 uppc, ulpc, uipc;
 	char *name, *last_name;
 
@@ -97,7 +95,7 @@ static int lookup_kas_proc(void *pc, struct loc_result *location)
 
 	ulpc == 0;
 	last_name = NULL;
-	uipc = (__u64)pc;
+	uipc = pc;
 	while (!feof(pf)) {
 		fscanf(pf, "%p %*s %as %*s", &ppc, &name);
 		uppc = (__u64)ppc;
@@ -136,10 +134,14 @@ static int lookup_kas_init(void)
 
 static int lookup_kas_sym(void *pc, struct loc_result *location)
 {
-	if (!lookup_kas_cache(pc, location))
+	__u64 pcv;
+
+	memcpy(&pcv, pc, sizeof(void *));
+
+	if (!lookup_kas_cache(pcv, location))
 		return 0;
 
-	return lookup_kas_proc(pc, location);
+	return lookup_kas_proc(pcv, location);
 }
 
 struct lookup_methods kallsym_methods = {
