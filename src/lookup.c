@@ -38,12 +38,39 @@
 extern struct lookup_methods bfd_methods;
 extern struct lookup_methods kallsym_methods;
 
+static int lookup_null_init(void)
+{
+	printf("Initalizing null lookup method\n");
+	return 0;
+}
+
+static int lookup_null_sym(void *pc, struct loc_result *location)
+{
+	/*
+	 * In the null method, every lookup fails
+	 */
+	return 1;
+}
+
+static struct lookup_methods null_methods = {
+	lookup_null_init,
+        lookup_null_sym,
+};
+
 static struct lookup_methods *methods = NULL;
 
 int init_lookup(lookup_init_method_t method)
 {
 	int rc;
 	switch (method) {
+	case METHOD_NULL:
+		/*
+ 		 * Don't actuall do any lookups,
+ 		 * just pretend everything is
+ 		 * not found
+ 		 */
+		methods = &null_methods;
+		break;
 	case METHOD_AUTO:
 		methods = &bfd_methods;
 		if (methods->lookup_init() == 0)

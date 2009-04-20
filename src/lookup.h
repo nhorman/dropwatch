@@ -33,6 +33,7 @@
  * Initalization routine
  * INPUTS:
  *   method - enum describing how to do translation
+ *          * METHOD_NULL : Just print pc values, not symbols
  *          * METHOD_AUTO : automatic search for best method
  *          * METHOD_DEBUGINFO : use debuginfo package
  *          * METHOD_KALLSYMS : use /proc/kallsyms
@@ -41,7 +42,8 @@
  *          * < 0 : initalization failed
  */
 typedef enum {
-	METHOD_AUTO = 0,
+	METHOD_NULL = 0,
+	METHOD_AUTO,
 	METHOD_DEBUGINFO,
 	METHOD_KALSYMS
 } lookup_init_method_t;

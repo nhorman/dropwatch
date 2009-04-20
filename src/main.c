@@ -537,7 +537,7 @@ int main (int argc, char **argv)
 	/*
  	 * Initalize our lookup library
  	 */
-	init_lookup(METHOD_AUTO);
+	init_lookup(METHOD_NULL);
 
 	enter_state_loop();
 	printf("Shutting down ...\n");
