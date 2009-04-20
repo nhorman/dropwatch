@@ -327,7 +327,7 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 		if (lookup_symbol(location, &res))
 			printf ("%d drops at location %p\n", alert->points[i].count, location);
 		else
-			printf ("%d drops at %s+%x\n",res.symbol, res.offset);
+			printf ("%d drops at %s+%x\n",alert->points[i].count, res.symbol, res.offset);
 		acount++;
 		if (alimit && (acount == alimit)) {
 			printf("Alert limit reached, deactivating!\n");
