@@ -136,7 +136,9 @@ static int lookup_kas_sym(void *pc, struct loc_result *location)
 {
 	__u64 pcv;
 
-	memcpy(&pcv, pc, sizeof(void *));
+	memset(&pcv, 0, sizeof(__u64));
+
+	memcpy(&pcv, &pc, sizeof(void *));
 
 	if (!lookup_kas_cache(pcv, location))
 		return 0;
