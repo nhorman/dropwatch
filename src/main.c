@@ -144,11 +144,6 @@ struct netlink_message *alloc_netlink_msg(uint32_t type, uint16_t flags, size_t 
 	struct netlink_message *msg;
 	static uint32_t seq = 0;
 
-	size += NLMSG_ALIGN(sizeof(struct netlink_message));
-	size += sizeof(struct nlmsghdr);
-	size = NLMSG_LENGTH(size);
-
-
 	msg = (struct netlink_message *)malloc(sizeof(struct netlink_message));
 
 	if (!msg)
