@@ -96,8 +96,10 @@ static int state = STATE_IDLE;
 void sigint_handler(int signum)
 {
 	if ((state == STATE_RECEIVING) ||
-	   (state == STATE_RQST_DEACTIVATE))
-		state = STATE_RQST_DEACTIVATE;
+	   (state == STATE_RQST_DEACTIVATE)) {
+		disable_drop_monitor();
+		state = STATE_DEACTIVATING;
+	}
 	else
 		printf("Got a sigint while not receiving\n");
 	return;	
