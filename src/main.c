@@ -316,7 +316,7 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 	struct nlmsghdr *nlh = msg->msg;
 	struct genlmsghdr *glh = nlmsg_data(nlh);
 	struct loc_result res;
-	struct net_dm_alert_msg *alert = genlmsg_data(glh);
+	struct net_dm_alert_msg *alert = nla_data(genlmsg_data(glh));
 
 	if (state != STATE_RECEIVING)
 		goto out_free;
