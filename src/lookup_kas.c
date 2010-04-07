@@ -75,7 +75,7 @@ static void kas_add_cache(__u64 start, __u64 end, char *name)
 
 	sym->start = start;
 	sym->end = end;
-	sym->sym_name = strdup(name);
+	sym->sym_name = name;
 
 	LIST_INSERT_HEAD(&sym_list_head, sym, list);
 	return;
@@ -97,16 +97,17 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 	last_name = NULL;
 	uipc = pc;
 	while (!feof(pf)) {
-		fscanf(pf, "%p %*s %as %*s", &ppc, &name);
+		fscanf(pf, "%llx %*s %as", &ppc, &name);
 		uppc = (__u64)ppc;
 		if ((uipc >= ulpc) &&
 		    (uipc < uppc)) {
 			/*
  			 * The last symbol we looked at
  			 * was a hit, record and return it
+ 			 * Note that we don't free last_name
+ 			 * here, because the cache is using it
  			 */
-			kas_add_cache(ulpc, uipc-1, last_name);
-			free(last_name);
+			kas_add_cache(ulpc, uppc-1, last_name);
 			fclose(pf);
 			return lookup_kas_cache(pc, location);
 		} 

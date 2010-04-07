@@ -1,5 +1,5 @@
 all: dropwatch
-CFLAGS+=-c -g
+CFLAGS+=-c -g -D_GNU_SOURCE
 LDFLAGS=-lbfd -lreadline -lnl
 OBJFILES := main.o lookup.o\
 	 lookup_bfd.o lookup_kas.o
