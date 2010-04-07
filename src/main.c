@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdint.h>
+#include <getopt.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/socket.h>
@@ -522,8 +523,56 @@ void enter_state_loop(void)
 	}
 }
 
+struct option options[] = {
+	{"lmethod", 1, 0, 'l'},
+	{0, 0, 0, 0}
+};
+
+void usage()
+{
+	printf("dropwatch [-l|--lmethod <method | list>]\n");
+}
+
 int main (int argc, char **argv)
 {
+	int c, optind;
+	lookup_init_method_t meth = METHOD_NULL;
+	/*
+	 * parse the options
+	 */
+	for(;;) {
+		c = getopt_long(argc, argv, "l:", options, &optind);
+
+		/* are we done parsing ? */
+		if (c == -1)
+			break;
+
+		switch(c) {
+
+		case '?':
+			usage();
+			exit(1);
+			/* NOTREACHED */
+		case 'l':
+			/* select the lookup method we want to use */
+			if (!strncmp(optarg, "list", 4)) {
+				printf("Available lookup methods:\n");
+				printf("kas - use /proc/kallsyms\n");
+				exit(0);
+			} else if (!strncmp(optarg, "kas", 3)) {
+				meth = METHOD_KALLSYMS;
+			} else {
+				printf("Unknown lookup method %s\n", optarg);
+				exit(1);
+			}
+			break;
+		default:
+			printf("Unknown option\n");
+			usage();
+			exit(1);
+			/* NOTREACHED */
+		}
+	}
 
 	/*
 	 * open up the netlink socket that we need to talk to our dropwatch socket
@@ -539,7 +588,7 @@ int main (int argc, char **argv)
 	/*
  	 * Initalize our lookup library
  	 */
-	init_lookup(METHOD_NULL);
+	init_lookup(meth);
 
 	enter_state_loop();
 	printf("Shutting down ...\n");

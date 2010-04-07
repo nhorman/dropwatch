@@ -45,7 +45,7 @@ typedef enum {
 	METHOD_NULL = 0,
 	METHOD_AUTO,
 	METHOD_DEBUGINFO,
-	METHOD_KALSYMS
+	METHOD_KALLSYMS
 } lookup_init_method_t;
 
 struct loc_result {

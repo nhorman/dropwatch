@@ -83,7 +83,7 @@ int init_lookup(lookup_init_method_t method)
 	case METHOD_DEBUGINFO:
 		methods = &bfd_methods;
 		break;
-	case METHOD_KALSYMS:
+	case METHOD_KALLSYMS:
 		methods = &kallsym_methods;
 		break;
 	}
