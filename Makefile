@@ -1,23 +1,22 @@
 REL_VERSION:=1.1
-REL_RELEASE:=0
 ROOT_DIR=$(shell pwd)
 
 all: release srpm rpm
 
 rel-upload: release
-	scp $(ROOT_DIR)/dropwatch-$(REL_VERSION)-$(REL_RELEASE).tbz2 fedorahosted.org:dropwatch
+	scp $(ROOT_DIR)/dropwatch-$(REL_VERSION).tbz2 fedorahosted.org:dropwatch
 
 release: tarball 
 
 tarball:
 	mkdir -p stage 
 	ln -s $(ROOT_DIR) stage/dropwatch-$(REL_VERSION)
-	tar jchf $(ROOT_DIR)/stage/dropwatch-$(REL_VERSION)-$(REL_RELEASE).tbz2 --exclude \.git --exclude stage -C stage dropwatch-$(REL_VERSION)/
+	tar jchf $(ROOT_DIR)/stage/dropwatch-$(REL_VERSION).tbz2 --exclude \.git --exclude stage -C stage dropwatch-$(REL_VERSION)/
 	mv $(ROOT_DIR)/stage/*.tbz2 $(ROOT_DIR)
 	rm -rf stage
 
 srpm: tarball
-	$(shell sed -e"s/MAKEFILE_VERSION/$(REL_VERSION)/" -e"s/MAKEFILE_RELEASE/$(REL_RELEASE)/" ./spec/dropwatch.spec > ./dropwatch.spec)
+	$(shell sed -e"s/MAKEFILE_VERSION/$(REL_VERSION)/" ./spec/dropwatch.spec > ./dropwatch.spec)
 	rpmbuild --define "_sourcedir $(ROOT_DIR)" --define "_srcrpmdir $(ROOT_DIR)" -bs $(ROOT_DIR)/dropwatch.spec
 
 rpm: srpm
@@ -40,7 +39,7 @@ build_clean:
 	make -c src clean
 
 tag:
-	git tag -s -u $(GIT_AUTHOR_EMAIL) -m"Tag V$(REL_VERSION)-$(REL_RELEASE)" V$(REL_VERSION)-$(REL_RELEASE)
+	git tag -s -u $(GIT_AUTHOR_EMAIL) -m"Tag V$(REL_VERSION)" V$(REL_VERSION)
 
 git-upload:
 	git push --all ssh://git.fedorahosted.org/git/dropwatch.git

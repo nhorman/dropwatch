@@ -1,15 +1,15 @@
 %define uversion MAKEFILE_VERSION
-%define urelease MAKEFILE_RELEASE
 Summary: Kernel dropped packet monitor 
 Name: dropwatch 
 Version: %{uversion} 
-Release: %{urelease}%{?dist} 
-Source0: https://fedorahosted.org/releases/d/r/dropwatch/dropwatch-%{uversion}-%{urelease}.tbz2
+Release: 0%{?dist} 
+Source0: https://fedorahosted.org/releases/d/r/dropwatch/dropwatch-%{uversion}.tbz2
 URL: http://fedorahosted.org/dropwatch
 License: GPLv2+ 
 Group: Applications/System 
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 BuildRequires: kernel-devel, libnl-devel, readline-devel
+BuildRequires: binutils-devel, binutils-static
 Requires: libnl, readline
 
 %description
@@ -43,6 +43,9 @@ rm -rf $RPM_BUILD_ROOT
 %doc COPYING
 
 %changelog
+* Thu Apr 08 2010 Neil Horman <nhorman@redhat.com> 1.1-0
+- Fixing BuildRequires in spec, and removing release variable
+
 * Thu Mar 26 2009 Neil Horman <nhorman@redhat.com> 1.0-3
 - Updating Makefile to include release num in tarball
 
