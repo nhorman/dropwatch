@@ -426,6 +426,13 @@ void enter_command_line_mode()
 	do {
 		input = readline("dropwatch> ");
 
+		if (input == NULL) {
+			/* Someone closed stdin on us */
+			printf("Terminating dropwatch...\n");
+			state = STATE_EXIT;
+			break;
+		}
+
 		if (!strcmp(input,"start")) {
 			state = STATE_RQST_ACTIVATE;
 			break;
