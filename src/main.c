@@ -379,9 +379,16 @@ out:
 
 void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *msg, int err)
 {
-	printf("Got a stop message\n");
-	if (err == 0)
+	char *erm;
+
+	if ((err == 0) || (err == -EAGAIN)) {
+		printf("Got a stop message\n");
 		state = STATE_IDLE;
+	} else {
+		erm = strerror(err*-1);
+		printf("Stop request failed, error: %s\n", erm);
+	}
+
 	free_netlink_msg(msg);
 	free_netlink_msg(amsg);
 }
