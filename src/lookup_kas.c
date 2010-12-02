@@ -97,7 +97,7 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 	last_name = NULL;
 	uipc = pc;
 	while (!feof(pf)) {
-		fscanf(pf, "%llx %*s %as", &ppc, &name);
+		fscanf(pf, "%llx %*s %as %*[^\n]", &ppc, &name);
 		uppc = (__u64)ppc;
 		if ((uipc >= ulpc) &&
 		    (uipc < uppc)) {
