@@ -373,8 +373,6 @@ void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *m
 		state = STATE_FAILED;
 	}
 out:
-	free_netlink_msg(msg);
-	free_netlink_msg(amsg);
 	return;
 }
 
@@ -390,8 +388,6 @@ void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *ms
 		printf("Stop request failed, error: %s\n", erm);
 	}
 
-	free_netlink_msg(msg);
-	free_netlink_msg(amsg);
 }
 
 int enable_drop_monitor()
