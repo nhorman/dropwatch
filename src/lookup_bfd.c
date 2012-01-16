@@ -48,7 +48,7 @@ static int lookup_bfd_init(void)
 		return-1;
 
 	dbibuf = malloc(strlen("/usr/lib/debug/lib/modules") + strlen(uts.release) + 1);
-	sprintf(dbibuf,"/usr/lib/debug/lib/modules/%s\0", uts.release);
+	sprintf(dbibuf,"/usr/lib/debug/lib/modules/%s", uts.release);
 	if (stat(dbibuf,&sb) < 0) {
 		free(dbibuf);
 		goto out_fail;

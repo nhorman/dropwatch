@@ -27,6 +27,7 @@
 #include <signal.h>
 #include <stdint.h>
 #include <getopt.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/socket.h>
@@ -68,6 +69,7 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_config_msg(struct netlink_message *msg, int err);
 void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
+int disable_drop_monitor();
 
 
 static void(*type_cb[_NET_DM_CMD_MAX])(struct netlink_message *, int err) = {
@@ -223,7 +225,7 @@ struct netlink_message *recv_netlink_message(int *err)
 	int rc;
 
 	*err = 0;
-restart:
+
 	do {
 		rc = nl_recv(nsd, &nla, &buf, NULL);
 		if (rc < 0) {	
@@ -330,7 +332,7 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 		if (lookup_symbol(location, &res))
 			printf ("%d drops at location %p\n", alert->points[i].count, location);
 		else
-			printf ("%d drops at %s+%x (%p)\n",
+			printf ("%d drops at %s+%llx (%p)\n",
 				alert->points[i].count, res.symbol, res.offset, location);
 		acount++;
 		if (alimit && (acount == alimit)) {
@@ -461,7 +463,7 @@ void enter_command_line_mode()
 			char *ninput = input+4;
 			if (!strncmp(ninput, "alertlimit", 10)) {
 				alimit = strtoul(ninput+10, NULL, 10);
-				printf("setting alert capture limit to %d\n",
+				printf("setting alert capture limit to %lu\n",
 					alimit);
 				goto next_input;
 			}
@@ -603,8 +605,8 @@ int main (int argc, char **argv)
 
 	enter_state_loop();
 	printf("Shutting down ...\n");
-done:
-	close(nsd);
+
+	nl_close(nsd);
 	exit(0);
 out:
 	exit(1);

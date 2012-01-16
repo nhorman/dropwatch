@@ -93,7 +93,6 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 	if (!pf)
 		return 1;
 
-	ulpc == 0;
 	last_name = NULL;
 	uipc = pc;
 	while (!feof(pf)) {
