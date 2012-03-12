@@ -96,7 +96,12 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 	last_name = NULL;
 	uipc = pc;
 	while (!feof(pf)) {
-		fscanf(pf, "%llx %*s %as %*[^\n]", &ppc, &name);
+		/* 
+		 * Each line of /proc/kallsyms is formatteded as:
+		 *  - "%pK %c %s\n" (for kernel internal symbols), or
+		 *  - "%pK %c %s\t[%s]\n" (for module-provided symbols)
+		 */
+		fscanf(pf, "%llx %*s %as [ %*[^]] ]", &ppc, &name);
 		uppc = (__u64)ppc;
 		if ((uipc >= ulpc) &&
 		    (uipc < uppc)) {
@@ -108,14 +113,14 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
  			 */
 			kas_add_cache(ulpc, uppc-1, last_name);
 			fclose(pf);
+			free(name);
 			return lookup_kas_cache(pc, location);
 		} 
 
 		/*
  		 * Advance all our state holders
  		 */
-		if (!last_name)
-			free(last_name);
+		free(last_name);
 		last_name = name;
 		ulpc = uppc;
 	}
