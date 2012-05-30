@@ -101,7 +101,11 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 		 *  - "%pK %c %s\n" (for kernel internal symbols), or
 		 *  - "%pK %c %s\t[%s]\n" (for module-provided symbols)
 		 */
-		fscanf(pf, "%llx %*s %as [ %*[^]] ]", &ppc, &name);
+		if (fscanf(pf, "%llx %*s %as [ %*[^]] ]", &ppc, &name) < 0) {
+			perror("Error Scanning File: ");
+			break;
+		}
+
 		uppc = (__u64)ppc;
 		if ((uipc >= ulpc) &&
 		    (uipc < uppc)) {
