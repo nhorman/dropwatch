@@ -80,7 +80,7 @@ static void(*type_cb[_NET_DM_CMD_MAX])(struct netlink_message *, int err) = {
 	NULL
 };
 
-static struct nl_handle *nsd;
+static struct nl_sock *nsd;
 static int nsf;
 
 enum {
@@ -108,13 +108,13 @@ void sigint_handler(int signum)
 	return;	
 }
 
-struct nl_handle *setup_netlink_socket()
+struct nl_sock *setup_netlink_socket()
 {
-	struct nl_handle *sd;
+	struct nl_sock *sd;
 	int family;
 
 	
-	sd = nl_handle_alloc();
+	sd = nl_socket_alloc();
 
 	genl_connect(sd);
 
@@ -128,9 +128,9 @@ struct nl_handle *setup_netlink_socket()
 	nsf = family;
 
 	nl_close(sd);
-	nl_handle_destroy(sd);
+	nl_socket_free(sd);
 
-	sd = nl_handle_alloc();
+	sd = nl_socket_alloc();
 	nl_join_groups(sd, NET_DM_GRP_ALERT);
 
 	nl_connect(sd, NETLINK_GENERIC);
@@ -139,7 +139,7 @@ struct nl_handle *setup_netlink_socket()
 
 out_close:
 	nl_close(sd);
-	nl_handle_destroy(sd);
+	nl_socket_free(sd);
 	return NULL;
 
 }
