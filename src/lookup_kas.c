@@ -95,6 +95,7 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 
 	last_name = NULL;
 	uipc = pc;
+	ulpc = 0;
 	while (!feof(pf)) {
 		/* 
 		 * Each line of /proc/kallsyms is formatteded as:
