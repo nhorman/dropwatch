@@ -1,4 +1,4 @@
-REL_VERSION:=1.3
+REL_VERSION:=1.4
 ROOT_DIR=$(shell pwd)
 
 all: release srpm rpm
