@@ -333,7 +333,7 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 			printf ("%d drops at location %p\n", alert->points[i].count, location);
 		else
 			printf ("%d drops at %s+%llx (%p)\n",
-				alert->points[i].count, res.symbol, res.offset, location);
+				alert->points[i].count, res.symbol, (unsigned long long)res.offset, location);
 		acount++;
 		if (alimit && (acount == alimit)) {
 			printf("Alert limit reached, deactivating!\n");
