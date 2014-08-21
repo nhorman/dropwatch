@@ -1,36 +1,41 @@
-.PU
 .TH dropwatch "1" "Mar 2009" "Neil Horman"
 .SH NAME
-dropwatch - kernel dropped packet monitoring utility 
+dropwatch \- kernel dropped packet monitoring utility
 .SH SYNOPSIS
-.B dropwatch [-l <method> | list]
+\fBdropwatch\fP [\fB\-l\fP \fImethod\fP | \fBlist\fP]
 .SH DESCRIPTION
-.I dropwatch 
-dropwatch is an interactive utility for monitoring and recording packets that
-are dropped by the kernel
-.SH OPTIONS  
+.B dropwatch
+is an interactive utility for monitoring and recording packets that
+are dropped by the kernel.
+.SH OPTIONS
 .TP
-.B -l <method> | list
+\fB\-l\fP \fImethod\fP | \fBlist\fP, \fB\-\-lmethod\fP \fImethod\fP | \fBlist\fP
 Select the translation method to use when a drop alert arrives.  By default the
-raw instruction pointer of a drop location is output, but by the use of the -l
+raw instruction pointer of a drop location is output, but by the use of the \fB\-l\fP
 option, we can assign a translation method so that the instruction pointer can
-be translated into function names.  Currently supported lookup methods are:
-.PP
-.B kas - use /proc/kallsyms to lookup instruction pointers to function mappings
+be translated into function names.  Currently supported lookup \fImethods\fP are:
+.RS
+.TP
+.B list
+Show all supported methods.
+.TP
+.B kas
+Use \fI/proc/kallsyms\fP to lookup instruction pointers to function mappings.
+.RE
 .SH INTERACTIVE COMMANDS
 .TP
-.B start 
-Tells the kernel to start reporting dropped packets
+.B start
+Tells the kernel to start reporting dropped packets.
 .TP
-.B stop 
-Tells the kernel to discontinue reporting dropped packets
+.B stop
+Tells the kernel to discontinue reporting dropped packets.
 .TP
-.B exit 
-Exits the dropmonitor program
+.B exit
+Exits the \fBdropmonitor\fP program.
 .TP
-.B help 
-Displays summary of all commands
+.B help
+Displays summary of all commands.
 .TP
-.B set alertlimit <value>
-Sets a triggerpoint to stop monitoring for dropped packets after <value> alerts
-have been received
+\fBset alertlimit\fP \fIvalue\fP
+Sets a triggerpoint to stop monitoring for dropped packets after \fIvalue\fP alerts
+have been received.
