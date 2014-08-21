@@ -1,5 +1,5 @@
 REL_VERSION:=1.4
-ROOT_DIR=$(shell pwd)
+ROOT_DIR := $(shell pwd)
 
 all: release srpm rpm
 
@@ -44,4 +44,3 @@ tag:
 git-upload:
 	git push --all ssh://git.fedorahosted.org/git/dropwatch.git
 	git push --tags ssh://git.fedorahosted.org/git/dropwatch.git
-
