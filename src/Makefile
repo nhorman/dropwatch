@@ -10,5 +10,5 @@ dropwatch: $(OBJFILES)
 %.o: %.c
 	gcc $(CFLAGS) $<
 clean:
-	rm -f dropwatch *.o
+	$(RM) dropwatch *.o
 

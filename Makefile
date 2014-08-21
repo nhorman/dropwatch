@@ -13,7 +13,7 @@ tarball:
 	ln -s $(ROOT_DIR) stage/dropwatch-$(REL_VERSION)
 	tar jchf $(ROOT_DIR)/stage/dropwatch-$(REL_VERSION).tbz2 --exclude \.git --exclude stage -C stage dropwatch-$(REL_VERSION)/
 	mv $(ROOT_DIR)/stage/*.tbz2 $(ROOT_DIR)
-	rm -rf stage
+	$(RM) -r stage
 
 srpm: tarball
 	$(shell sed -e"s/MAKEFILE_VERSION/$(REL_VERSION)/" ./spec/dropwatch.spec > ./dropwatch.spec)
@@ -23,20 +23,20 @@ rpm: srpm
 	mkdir -p BUILD
 	mkdir -p RPMS
 	rpmbuild --define "_sourcedir $(ROOT_DIR)" --define "_builddir $(ROOT_DIR)/BUILD" --define "_rpmdir $(ROOT_DIR)/RPMS" -bb $(ROOT_DIR)/dropwatch.spec
-	rm -rf BUILD
+	$(RM) -r BUILD
 
 clean:
-	rm -f $(ROOT_DIR)/dropwatch*.tbz2 $(ROOT_DIR)/*.rpm $(ROOT_DIR)/*.spec
-	rm -rf BUILD
-	rm -rf RPMS
-	rm -rf stage
-	make -C src clean 
+	$(RM) $(ROOT_DIR)/dropwatch*.tbz2 $(ROOT_DIR)/*.rpm $(ROOT_DIR)/*.spec
+	$(RM) -r BUILD
+	$(RM) -r RPMS
+	$(RM) -r stage
+	$(MAKE) -C src clean
 
 build:
-	make -C src all 
+	$(MAKE) -C src all
 
 build_clean:
-	make -C src clean
+	$(MAKE) -C src clean
 
 tag:
 	git tag -s -u $(GIT_AUTHOR_EMAIL) -m"Tag V$(REL_VERSION)" V$(REL_VERSION)
