@@ -36,7 +36,7 @@ build:
 	make -C src all 
 
 build_clean:
-	make -c src clean
+	make -C src clean
 
 tag:
 	git tag -s -u $(GIT_AUTHOR_EMAIL) -m"Tag V$(REL_VERSION)" V$(REL_VERSION)
