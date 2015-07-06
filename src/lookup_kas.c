@@ -102,7 +102,7 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 		 *  - "%pK %c %s\n" (for kernel internal symbols), or
 		 *  - "%pK %c %s\t[%s]\n" (for module-provided symbols)
 		 */
-		if (fscanf(pf, "%llx %*s %as [ %*[^]] ]", (unsigned long long *)&ppc, &name) < 0) {
+		if (fscanf(pf, "%llx %*s %ms [ %*[^]] ]", (unsigned long long *)&ppc, &name) < 0) {
 			perror("Error Scanning File: ");
 			break;
 		}
