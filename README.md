@@ -1,4 +1,9 @@
-Thanks for Downloading dropwatch!
+DropWatch
+=========
+
+[![Build Status](https://travis-ci.org/nhorman/dropwatch.svg?branch=master)](https://travis-ci.org/nhorman/dropwatch)
+
+Thanks for Downloading Dropwatch!
 
 What is Dropwatch?
 Dropwatch is a project I started in an effort to improve the ability for
