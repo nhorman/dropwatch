@@ -1,0 +1,15 @@
+language: c
+dist: trusty
+
+compiler:
+  - clang
+  - gcc
+addons:
+  apt:
+    packages:
+      binutils-dev
+      libreadline-dev
+      libnl-3-dev
+      libnl-genl-3-dev
+
+script: make build
