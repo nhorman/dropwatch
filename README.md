@@ -38,5 +38,5 @@ packets when they happen.
 
 Questions
 Feel free to email me directly at nhorman@redhat.com with question, or if you
-find a bug, open a trac ticket at https://fedorahosted.org/dropwatch/
+find a bug, open a trac ticket here on the github page
 
