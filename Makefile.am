@@ -24,5 +24,5 @@ AUTOMAKE_OPTIONS = no-dependencies
 ACLOCAL_AMFLAGS = -I m4
 EXTRA_DIST = COPYING autogen.sh
 
-SUBDIRS = src doc
+SUBDIRS = src doc tests
 

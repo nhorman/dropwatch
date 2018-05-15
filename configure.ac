@@ -15,7 +15,7 @@ AC_CHECK_FUNCS(getopt_long)
 
 PKG_CHECK_MODULES([LIBNL3], [libnl-3.0], [], [AC_MSG_ERROR([libnl-3.0 is required])])
 
-AC_OUTPUT(Makefile src/Makefile doc/Makefile)
+AC_OUTPUT(Makefile src/Makefile doc/Makefile tests/Makefile)
 
 AC_MSG_NOTICE()
 AC_MSG_NOTICE([dropwatch Version:     $VERSION])
