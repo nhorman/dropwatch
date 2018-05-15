@@ -12,4 +12,7 @@ addons:
       libnl-3-dev
       libnl-genl-3-dev
 
-script: make build
+script: ./autogen.sh && ./configure && make && make check 
+
+after_script: cat ./tests/rundropwatch.sh.log
+
