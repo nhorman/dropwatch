@@ -1,6 +1,12 @@
 #!/bin/sh
 
-echo -e "set alertlimit 1\nstart\nstop" | ../src/dropwatch -l kas
+abort_dropwatch() {
+	sleep 5
+	killall -SIGINT dropwatch
+}
+
+abort_dropwatch &
+echo -e "set alertlimit 1\nstart\nstop\nexit" | ../src/dropwatch -l kas
 
 if [ $? -ne 0 ]
 then
