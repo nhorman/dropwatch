@@ -36,6 +36,14 @@ when lost packets are rare.  This solution improves on the performance aspect by
 implementing a kernel feature which allows asyncronous notification of dropped
 packets when they happen.
 
+Building Dropwatch
+Dropwatch uses the autotools suite (autoconf/automake) to build.  To build and install the utility run the following commands:
+./autogen.sh
+./configure
+make
+make install
+
+
 Questions
 Feel free to email me directly at nhorman@redhat.com with question, or if you
 find a bug, open a trac ticket here on the github page
