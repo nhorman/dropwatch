@@ -24,6 +24,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <sys/utsname.h>
 #include <bfd.h>
 #include <string.h>
@@ -146,9 +147,7 @@ static int lookup_kas_sym(void *pc, struct loc_result *location)
 {
 	__u64 pcv;
 
-	memset(&pcv, 0, sizeof(__u64));
-
-	memcpy(&pcv, &pc, sizeof(void *));
+	pcv = (uintptr_t)pc;
 
 	if (!lookup_kas_cache(pcv, location))
 		return 0;
