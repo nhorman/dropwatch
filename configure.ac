@@ -1,4 +1,4 @@
-AC_INIT(dropwatch,1.5)
+AC_INIT(dropwatch,1.5.1)
 AC_PREREQ(2.12)dnl
 AM_CONFIG_HEADER(config.h)
 
