@@ -1,12 +1,12 @@
 %define uversion MAKEFILE_VERSION
-Summary: Kernel dropped packet monitor 
-Name: dropwatch 
-Version: %{uversion} 
-Release: 0%{?dist} 
+Summary: Kernel dropped packet monitor
+Name: dropwatch
+Version: %{uversion}
+Release: 0%{?dist}
 Source0: https://fedorahosted.org/releases/d/r/dropwatch/dropwatch-%{uversion}.tbz2
 URL: http://fedorahosted.org/dropwatch
-License: GPLv2+ 
-Group: Applications/System 
+License: GPLv2+
+Group: Applications/System
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 BuildRequires: kernel-devel, libnl-devel, readline-devel
 BuildRequires: binutils-devel, binutils-static pkgconfig
@@ -22,7 +22,7 @@ network packets.
 %build
 cd src
 export CFLAGS=$RPM_OPT_FLAGS
-make 
+make
 
 %install
 rm -rf $RPM_BUILD_ROOT

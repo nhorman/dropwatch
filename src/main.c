@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009, Neil Horman <nhorman@redhat.com>
- * 
+ *
  * This program file is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
  * Free Software Foundation; version 2 of the License.
@@ -71,7 +71,6 @@ void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *m
 void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 int disable_drop_monitor();
 
-
 static void(*type_cb[_NET_DM_CMD_MAX])(struct netlink_message *, int err) = {
 	NULL,
 	handle_dm_alert_msg,
@@ -102,10 +101,10 @@ void sigint_handler(int signum)
 	   (state == STATE_RQST_DEACTIVATE)) {
 		disable_drop_monitor();
 		state = STATE_DEACTIVATING;
-	}
-	else
+	} else {
 		printf("Got a sigint while not receiving\n");
-	return;	
+	}
+	return;
 }
 
 struct nl_sock *setup_netlink_socket()
@@ -113,7 +112,6 @@ struct nl_sock *setup_netlink_socket()
 	struct nl_sock *sd;
 	int family;
 
-	
 	sd = nl_socket_alloc();
 
 	genl_connect(sd);
@@ -141,7 +139,6 @@ out_close:
 	nl_close(sd);
 	nl_socket_free(sd);
 	return NULL;
-
 }
 
 struct netlink_message *alloc_netlink_msg(uint32_t type, uint16_t flags, size_t size)
@@ -155,7 +152,7 @@ struct netlink_message *alloc_netlink_msg(uint32_t type, uint16_t flags, size_t 
 		return NULL;
 
 	msg->refcnt = 1;
-	msg->nlbuf = nlmsg_alloc(); 
+	msg->nlbuf = nlmsg_alloc();
 	msg->msg = genlmsg_put(msg->nlbuf, 0, seq, nsf, size, flags, type, 1);
 
 	msg->ack_cb = NULL;
@@ -167,7 +164,6 @@ struct netlink_message *alloc_netlink_msg(uint32_t type, uint16_t flags, size_t 
 void set_ack_cb(struct netlink_message *msg,
 			void (*cb)(struct netlink_message *, struct netlink_message *, int))
 {
-
 	if (msg->ack_cb)
 		return;
 
@@ -176,7 +172,6 @@ void set_ack_cb(struct netlink_message *msg,
 	LIST_INSERT_HEAD(&ack_list_head, msg, ack_list_element);
 }
 
-		
 struct netlink_message *wrap_netlink_msg(struct nlmsghdr *buf)
 {
 	struct netlink_message *msg;
@@ -228,7 +223,7 @@ struct netlink_message *recv_netlink_message(int *err)
 
 	do {
 		rc = nl_recv(nsd, &nla, &buf, NULL);
-		if (rc < 0) {	
+		if (rc < 0) {
 			switch (errno) {
 			case EINTR:
 				/*
@@ -259,8 +254,8 @@ struct netlink_message *recv_netlink_message(int *err)
 			if (am->seq == errm->msg.nlmsg_seq)
 				break;
 		}
-	
-		if (am) {	
+
+		if (am) {
 			LIST_REMOVE(am, ack_list_element);
 			am->ack_cb(msg, am, errm->error);
 			free_netlink_msg(am);
@@ -274,16 +269,16 @@ struct netlink_message *recv_netlink_message(int *err)
 
 	glm = nlmsg_data(msg->msg);
 	type = glm->cmd;
-	
+
 	if ((type > NET_DM_CMD_MAX) ||
 	    (type <= NET_DM_CMD_UNSPEC)) {
-		printf("Received message of unknown type %d\n", 
+		printf("Received message of unknown type %d\n",
 			type);
 		free_netlink_msg(msg);
 		return NULL;
 	}
 
-	return msg;	
+	return msg;
 }
 
 void process_rx_message(void)
@@ -302,13 +297,11 @@ void process_rx_message(void)
 	if (msg) {
 		struct nlmsghdr *nlh = msg->msg;
 		struct genlmsghdr *glh = nlmsg_data(nlh);
-		type  = glh->cmd; 
+		type = glh->cmd;
 		type_cb[type](msg, err);
 	}
 	return;
 }
-
-
 
 /*
  * These are the received message handlers
@@ -324,8 +317,6 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 	if (state != STATE_RECEIVING)
 		goto out_free;
 
-
-
 	for (i=0; i < alert->entries; i++) {
 		void *location;
 		memcpy(&location, alert->points[i].pc, sizeof(void *));
@@ -339,7 +330,7 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 			printf("Alert limit reached, deactivating!\n");
 			state = STATE_RQST_DEACTIVATE;
 		}
-	}	
+	}
 
 out_free:
 	free_netlink_msg(msg);
@@ -358,7 +349,7 @@ void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *m
 		state = STATE_FAILED;
 		goto out;
 	}
-	
+
 	if (state == STATE_ACTIVATING) {
 		struct sigaction act;
 		memset(&act, 0, sizeof(struct sigaction));
@@ -389,7 +380,6 @@ void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *ms
 		erm = strerror(err*-1);
 		printf("Stop request failed, error: %s\n", erm);
 	}
-
 }
 
 int enable_drop_monitor()
@@ -399,7 +389,7 @@ int enable_drop_monitor()
 	msg = alloc_netlink_msg(NET_DM_CMD_START, NLM_F_REQUEST|NLM_F_ACK, 0);
 
 	set_ack_cb(msg, handle_dm_start_msg);
-	
+
 	return send_netlink_message(msg);
 }
 
@@ -477,7 +467,6 @@ next_input:
 
 void enter_state_loop(void)
 {
-
 	int should_rx = 0;
 
 	while (1) {
@@ -496,9 +485,7 @@ void enter_state_loop(void)
 				state = STATE_ACTIVATING;
 				should_rx = 1;
 			}
-			
 			break;
-
 		case STATE_ACTIVATING:
 			printf("Waiting for activation ack....\n");
 			break;
@@ -516,7 +503,6 @@ void enter_state_loop(void)
 		case STATE_DEACTIVATING:
 			printf("Waiting for deactivation ack...\n");
 			break;
-
 		case STATE_EXIT:
 		case STATE_FAILED:
 			should_rx = 0;
