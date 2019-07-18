@@ -22,6 +22,8 @@
  * symbollic name using the bfd library
  */
 
+#include "config.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/utsname.h>
