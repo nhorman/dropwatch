@@ -48,3 +48,9 @@ alert includes drop locations and number of drops in each location.
 .I packet
 - Each dropped packet is sent to user space. The alert includes the packet
 itself and various metadata such as drop location and timestamp.
+.TP
+.BI "set trunc " "len"
+Sets the truncation length. Reported packets will be truncated to length
+\fIlen\fP. This setting is only applicable when \fIalertmode\fP is set to
+\fIpacket\fP. By default packets are not truncated. A value of \fI0\fP disables
+truncation.

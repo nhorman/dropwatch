@@ -64,6 +64,7 @@ struct ack_list ack_list_head = {NULL};
 
 unsigned long alimit = 0;
 unsigned long acount = 0;
+unsigned long trunc_len = 0;
 
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_packet_alert_msg(struct netlink_message *msg, int err);
@@ -96,6 +97,8 @@ enum {
 	STATE_RQST_ALERT_MODE_SUMMARY,
 	STATE_RQST_ALERT_MODE_PACKET,
 	STATE_ALERT_MODE_SETTING,
+	STATE_RQST_TRUNC_LEN,
+	STATE_TRUNC_LEN_SETTING,
 };
 
 static int state = STATE_IDLE;
@@ -107,6 +110,7 @@ static struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
 	[NET_DM_ATTR_TIMESTAMP]			= { .type = NLA_U64 },
 	[NET_DM_ATTR_PROTO]			= { .type = NLA_U16 },
 	[NET_DM_ATTR_PAYLOAD]			= { .type = NLA_UNSPEC },
+	[NET_DM_ATTR_ORIG_LEN]			= { .type = NLA_U32 },
 };
 
 static struct nla_policy net_dm_port_policy[NET_DM_ATTR_PORT_MAX + 1] = {
@@ -410,6 +414,10 @@ void handle_dm_packet_alert_msg(struct netlink_message *msg, int err)
 	if (attrs[NET_DM_ATTR_PAYLOAD])
 		printf("length: %u\n", nla_len(attrs[NET_DM_ATTR_PAYLOAD]));
 
+	if (attrs[NET_DM_ATTR_ORIG_LEN])
+		printf("original length: %u\n",
+		       nla_get_u32(attrs[NET_DM_ATTR_ORIG_LEN]));
+
 	printf("\n");
 
 	acount++;
@@ -435,6 +443,10 @@ void handle_dm_config_msg(struct netlink_message *amsg, struct netlink_message *
 	switch (state) {
 	case STATE_ALERT_MODE_SETTING:
 		printf("Alert mode successfully set\n");
+		state = STATE_IDLE;
+		break;
+	case STATE_TRUNC_LEN_SETTING:
+		printf("Truncation length successfully set\n");
 		state = STATE_IDLE;
 		break;
 	default:
@@ -538,6 +550,26 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
+int set_trunc_len()
+{
+	struct netlink_message *msg;
+
+	msg = alloc_netlink_msg(NET_DM_CMD_CONFIG, NLM_F_REQUEST|NLM_F_ACK, 0);
+	if (!msg)
+		return -ENOMEM;
+
+	if (nla_put_u32(msg->nlbuf, NET_DM_ATTR_TRUNC_LEN, trunc_len))
+		goto nla_put_failure;
+
+	set_ack_cb(msg, handle_dm_config_msg);
+
+	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
+}
+
 void display_help()
 {
 	printf("Command Syntax:\n");
@@ -546,6 +578,8 @@ void display_help()
 	printf("set:\n");
 	printf("\talertlimit <number>\t - caputre only this many alert packets\n");
 	printf("\talertmode <mode>\t - set mode to \"summary\" or \"packet\"\n");
+	printf("\ttrunc <len>\t\t - truncate packets to this length. ");
+	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
 	printf("start\t\t\t\t - start capture\n");
 	printf("stop\t\t\t\t - stop capture\n");
 }
@@ -600,6 +634,10 @@ void enter_command_line_mode()
 					state = STATE_RQST_ALERT_MODE_PACKET;
 					break;
 				}
+			} else if (!strncmp(ninput, "trunc", 5)) {
+				trunc_len = strtoul(ninput + 6, NULL, 10);
+				state = STATE_RQST_TRUNC_LEN;
+				break;
 			}
 		}
 next_input:
@@ -664,6 +702,20 @@ void enter_state_loop(void)
 			break;
 		case STATE_ALERT_MODE_SETTING:
 			printf("Waiting for alert mode setting ack...\n");
+			break;
+		case STATE_RQST_TRUNC_LEN:
+			printf("Setting truncation length to %lu\n",
+			       trunc_len);
+			if (set_trunc_len() < 0) {
+				perror("Failed to set truncation length");
+				state = STATE_FAILED;
+			} else {
+				state = STATE_TRUNC_LEN_SETTING;
+				should_rx = 1;
+			}
+			break;
+		case STATE_TRUNC_LEN_SETTING:
+			printf("Waiting for truncation length setting ack...\n");
 			break;
 		default:
 			printf("Unknown state received!  exiting!\n");
