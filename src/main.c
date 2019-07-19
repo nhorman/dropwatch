@@ -66,7 +66,8 @@ unsigned long alimit = 0;
 unsigned long acount = 0;
 
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
-void handle_dm_config_msg(struct netlink_message *msg, int err);
+void handle_dm_packet_alert_msg(struct netlink_message *msg, int err);
+void handle_dm_config_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 int disable_drop_monitor();
@@ -74,9 +75,10 @@ int disable_drop_monitor();
 static void(*type_cb[_NET_DM_CMD_MAX])(struct netlink_message *, int err) = {
 	NULL,
 	handle_dm_alert_msg,
-	handle_dm_config_msg,
 	NULL,
-	NULL
+	NULL,
+	NULL,
+	handle_dm_packet_alert_msg,
 };
 
 static struct nl_sock *nsd;
@@ -91,9 +93,25 @@ enum {
 	STATE_DEACTIVATING,
 	STATE_FAILED,
 	STATE_EXIT,
+	STATE_RQST_ALERT_MODE_SUMMARY,
+	STATE_RQST_ALERT_MODE_PACKET,
+	STATE_ALERT_MODE_SETTING,
 };
 
 static int state = STATE_IDLE;
+
+static struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
+	[NET_DM_ATTR_PC]			= { .type = NLA_U64 },
+	[NET_DM_ATTR_SYMBOL]			= { .type = NLA_STRING },
+	[NET_DM_ATTR_IN_PORT]			= { .type = NLA_NESTED },
+	[NET_DM_ATTR_TIMESTAMP]			= { .type = NLA_U64 },
+	[NET_DM_ATTR_PROTO]			= { .type = NLA_U16 },
+	[NET_DM_ATTR_PAYLOAD]			= { .type = NLA_UNSPEC },
+};
+
+static struct nla_policy net_dm_port_policy[NET_DM_ATTR_PORT_MAX + 1] = {
+	[NET_DM_ATTR_PORT_NETDEV_IFINDEX]	= { .type = NLA_U32 },
+};
 
 void sigint_handler(int signum)
 {
@@ -336,9 +354,93 @@ out_free:
 	free_netlink_msg(msg);
 }
 
-void handle_dm_config_msg(struct netlink_message *msg, int err)
+void print_nested_port(struct nlattr *attr, const char *dir)
 {
-	printf("Got a config message\n");
+	struct nlattr *attrs[NET_DM_ATTR_PORT_MAX + 1];
+	int err;
+
+	err = nla_parse_nested(attrs, NET_DM_ATTR_PORT_MAX, attr,
+			       net_dm_port_policy);
+	if (err)
+		return;
+
+	if (attrs[NET_DM_ATTR_PORT_NETDEV_IFINDEX])
+		printf("%s port ifindex: %d\n", dir,
+		       nla_get_u32(attrs[NET_DM_ATTR_PORT_NETDEV_IFINDEX]));
+}
+
+void handle_dm_packet_alert_msg(struct netlink_message *msg, int err)
+{
+	struct nlattr *attrs[NET_DM_ATTR_MAX + 1];
+
+	if (state != STATE_RECEIVING)
+		goto out_free;
+
+	err = genlmsg_parse(msg->msg, 0, attrs, NET_DM_ATTR_MAX, net_dm_policy);
+	if (err)
+		goto out_free;
+
+	if (attrs[NET_DM_ATTR_PC] && attrs[NET_DM_ATTR_SYMBOL])
+		printf("drop at: %s (%p)\n",
+		       nla_get_string(attrs[NET_DM_ATTR_SYMBOL]),
+		       (void *) nla_get_u64(attrs[NET_DM_ATTR_PC]));
+
+	if (attrs[NET_DM_ATTR_IN_PORT])
+		print_nested_port(attrs[NET_DM_ATTR_IN_PORT], "input");
+
+	if (attrs[NET_DM_ATTR_TIMESTAMP]) {
+		time_t tv_sec;
+		struct tm *tm;
+		uint64_t ts;
+		char *tstr;
+
+		ts = nla_get_u64(attrs[NET_DM_ATTR_TIMESTAMP]);
+		tv_sec = ts / 1000000000;
+		tm = localtime(&tv_sec);
+
+		tstr = asctime(tm);
+		tstr[strlen(tstr) - 1] = 0;
+		printf("timestamp: %s %09ld nsec\n", tstr, ts % 1000000000);
+	}
+
+	if (attrs[NET_DM_ATTR_PROTO])
+		printf("protocol: 0x%x\n",
+		       nla_get_u16(attrs[NET_DM_ATTR_PROTO]));
+
+	if (attrs[NET_DM_ATTR_PAYLOAD])
+		printf("length: %u\n", nla_len(attrs[NET_DM_ATTR_PAYLOAD]));
+
+	printf("\n");
+
+	acount++;
+	if (alimit && (acount == alimit)) {
+		printf("Alert limit reached, deactivating!\n");
+		state = STATE_RQST_DEACTIVATE;
+	}
+
+out_free:
+	free_netlink_msg(msg);
+}
+
+void handle_dm_config_msg(struct netlink_message *amsg, struct netlink_message *msg, int err)
+{
+	if (err != 0) {
+		char *erm = strerror(-err);
+
+		printf("Failed config request, error: %s\n", erm);
+		state = STATE_FAILED;
+		return;
+	}
+
+	switch (state) {
+	case STATE_ALERT_MODE_SETTING:
+		printf("Alert mode successfully set\n");
+		state = STATE_IDLE;
+		break;
+	default:
+		printf("Received acknowledgement for non-solicited config request\n");
+		state = STATE_FAILED;
+	}
 }
 
 void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err)
@@ -404,6 +506,38 @@ int disable_drop_monitor()
 	return send_netlink_message(msg);
 }
 
+int set_alert_mode()
+{
+	enum net_dm_alert_mode alert_mode;
+	struct netlink_message *msg;
+
+	switch (state) {
+	case STATE_RQST_ALERT_MODE_SUMMARY:
+		alert_mode = NET_DM_ALERT_MODE_SUMMARY;
+		break;
+	case STATE_RQST_ALERT_MODE_PACKET:
+		alert_mode = NET_DM_ALERT_MODE_PACKET;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	msg = alloc_netlink_msg(NET_DM_CMD_CONFIG, NLM_F_REQUEST|NLM_F_ACK, 0);
+	if (!msg)
+		return -ENOMEM;
+
+	if (nla_put_u8(msg->nlbuf, NET_DM_ATTR_ALERT_MODE, alert_mode))
+		goto nla_put_failure;
+
+	set_ack_cb(msg, handle_dm_config_msg);
+
+	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
+}
+
 void display_help()
 {
 	printf("Command Syntax:\n");
@@ -411,6 +545,7 @@ void display_help()
 	printf("help\t\t\t\t - Display this message\n");
 	printf("set:\n");
 	printf("\talertlimit <number>\t - caputre only this many alert packets\n");
+	printf("\talertmode <mode>\t - set mode to \"summary\" or \"packet\"\n");
 	printf("start\t\t\t\t - start capture\n");
 	printf("stop\t\t\t\t - stop capture\n");
 }
@@ -456,6 +591,15 @@ void enter_command_line_mode()
 				printf("setting alert capture limit to %lu\n",
 					alimit);
 				goto next_input;
+			} else if (!strncmp(ninput, "alertmode", 9)) {
+				ninput = ninput + 10;
+				if (!strncmp(ninput, "summary", 7)) {
+					state = STATE_RQST_ALERT_MODE_SUMMARY;
+					break;
+				} else if (!strncmp(ninput, "packet", 6)) {
+					state = STATE_RQST_ALERT_MODE_PACKET;
+					break;
+				}
 			}
 		}
 next_input:
@@ -507,6 +651,20 @@ void enter_state_loop(void)
 		case STATE_FAILED:
 			should_rx = 0;
 			return;
+		case STATE_RQST_ALERT_MODE_SUMMARY:
+		case STATE_RQST_ALERT_MODE_PACKET:
+			printf("Setting alert mode\n");
+			if (set_alert_mode() < 0) {
+				perror("Failed to set alert mode");
+				state = STATE_FAILED;
+			} else {
+				state = STATE_ALERT_MODE_SETTING;
+				should_rx = 1;
+			}
+			break;
+		case STATE_ALERT_MODE_SETTING:
+			printf("Waiting for alert mode setting ack...\n");
+			break;
 		default:
 			printf("Unknown state received!  exiting!\n");
 			state = STATE_FAILED;
