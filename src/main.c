@@ -69,6 +69,7 @@ unsigned long queue_len = 0;
 
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_packet_alert_msg(struct netlink_message *msg, int err);
+void handle_dm_config_new_msg(struct netlink_message *msg, int err);
 void handle_dm_config_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
@@ -81,6 +82,8 @@ static void(*type_cb[_NET_DM_CMD_MAX])(struct netlink_message *, int err) = {
 	NULL,
 	NULL,
 	handle_dm_packet_alert_msg,
+	NULL,
+	handle_dm_config_new_msg,
 };
 
 static struct nl_sock *nsd;
@@ -102,18 +105,23 @@ enum {
 	STATE_TRUNC_LEN_SETTING,
 	STATE_RQST_QUEUE_LEN,
 	STATE_QUEUE_LEN_SETTING,
+	STATE_RQST_CONFIG,
+	STATE_CONFIG_GETTING,
 };
 
 static int state = STATE_IDLE;
 
 static struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
+	[NET_DM_ATTR_ALERT_MODE]		= { .type = NLA_U8 },
 	[NET_DM_ATTR_PC]			= { .type = NLA_U64 },
 	[NET_DM_ATTR_SYMBOL]			= { .type = NLA_STRING },
 	[NET_DM_ATTR_IN_PORT]			= { .type = NLA_NESTED },
 	[NET_DM_ATTR_TIMESTAMP]			= { .type = NLA_U64 },
 	[NET_DM_ATTR_PROTO]			= { .type = NLA_U16 },
 	[NET_DM_ATTR_PAYLOAD]			= { .type = NLA_UNSPEC },
+	[NET_DM_ATTR_TRUNC_LEN]			= { .type = NLA_U32 },
 	[NET_DM_ATTR_ORIG_LEN]			= { .type = NLA_U32 },
+	[NET_DM_ATTR_QUEUE_LEN]			= { .type = NLA_U32 },
 };
 
 static struct nla_policy net_dm_port_policy[NET_DM_ATTR_PORT_MAX + 1] = {
@@ -433,6 +441,44 @@ out_free:
 	free_netlink_msg(msg);
 }
 
+void handle_dm_config_new_msg(struct netlink_message *msg, int err)
+{
+	struct nlattr *attrs[NET_DM_ATTR_MAX + 1];
+
+	if (state != STATE_CONFIG_GETTING)
+		goto out_free;
+
+	err = genlmsg_parse(msg->msg, 0, attrs, NET_DM_ATTR_MAX, net_dm_policy);
+	if (err)
+		goto out_free;
+
+	if (!attrs[NET_DM_ATTR_ALERT_MODE] || !attrs[NET_DM_ATTR_TRUNC_LEN] ||
+	    !attrs[NET_DM_ATTR_QUEUE_LEN])
+		goto out_free;
+
+	printf("Alert mode: ");
+	switch (nla_get_u8(attrs[NET_DM_ATTR_ALERT_MODE])) {
+	case NET_DM_ALERT_MODE_SUMMARY:
+		printf("Summary\n");
+		break;
+	case NET_DM_ALERT_MODE_PACKET:
+		printf("Packet\n");
+		break;
+	default:
+		printf("Invalid alert mode\n");
+		break;
+	}
+
+	printf("Truncation length: %u\n",
+	       nla_get_u32(attrs[NET_DM_ATTR_TRUNC_LEN]));
+
+	printf("Queue length: %u\n", nla_get_u32(attrs[NET_DM_ATTR_QUEUE_LEN]));
+
+out_free:
+	state = STATE_IDLE;
+	free_netlink_msg(msg);
+}
+
 void handle_dm_config_msg(struct netlink_message *amsg, struct netlink_message *msg, int err)
 {
 	if (err != 0) {
@@ -597,6 +643,17 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
+int get_config()
+{
+	struct netlink_message *msg;
+
+	msg = alloc_netlink_msg(NET_DM_CMD_CONFIG_GET, NLM_F_REQUEST, 0);
+	if (!msg)
+		return -ENOMEM;
+
+	return send_netlink_message(msg);
+}
+
 void display_help()
 {
 	printf("Command Syntax:\n");
@@ -611,6 +668,7 @@ void display_help()
 	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
 	printf("start\t\t\t\t - start capture\n");
 	printf("stop\t\t\t\t - stop capture\n");
+	printf("show\t\t\t\t - show existing configuration\n");
 }
 
 void enter_command_line_mode()
@@ -672,6 +730,11 @@ void enter_command_line_mode()
 				state = STATE_RQST_QUEUE_LEN;
 				break;
 			}
+		}
+
+		if (!strncmp(input, "show", 4)) {
+			state = STATE_RQST_CONFIG;
+			break;
 		}
 next_input:
 		free(input);
@@ -762,6 +825,19 @@ void enter_state_loop(void)
 			break;
 		case STATE_QUEUE_LEN_SETTING:
 			printf("Waiting for queue length setting ack...\n");
+			break;
+		case STATE_RQST_CONFIG:
+			printf("Getting existing configuration\n");
+			if (get_config() < 0) {
+				perror("Failed to get existing configuration");
+				state = STATE_FAILED;
+			} else {
+				state = STATE_CONFIG_GETTING;
+				should_rx = 1;
+			}
+			break;
+		case STATE_CONFIG_GETTING:
+			printf("Waiting for existing configuration query response\n");
 			break;
 		default:
 			printf("Unknown state received!  exiting!\n");
