@@ -70,6 +70,7 @@ unsigned long queue_len = 0;
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_packet_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_config_new_msg(struct netlink_message *msg, int err);
+void handle_dm_stats_new_msg(struct netlink_message *msg, int err);
 void handle_dm_config_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
@@ -84,6 +85,8 @@ static void(*type_cb[_NET_DM_CMD_MAX])(struct netlink_message *, int err) = {
 	handle_dm_packet_alert_msg,
 	NULL,
 	handle_dm_config_new_msg,
+	NULL,
+	handle_dm_stats_new_msg,
 };
 
 static struct nl_sock *nsd;
@@ -107,6 +110,8 @@ enum {
 	STATE_QUEUE_LEN_SETTING,
 	STATE_RQST_CONFIG,
 	STATE_CONFIG_GETTING,
+	STATE_RQST_STATS,
+	STATE_STATS_GETTING,
 };
 
 static int state = STATE_IDLE;
@@ -122,10 +127,15 @@ static struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
 	[NET_DM_ATTR_TRUNC_LEN]			= { .type = NLA_U32 },
 	[NET_DM_ATTR_ORIG_LEN]			= { .type = NLA_U32 },
 	[NET_DM_ATTR_QUEUE_LEN]			= { .type = NLA_U32 },
+	[NET_DM_ATTR_STATS]			= { .type = NLA_NESTED },
 };
 
 static struct nla_policy net_dm_port_policy[NET_DM_ATTR_PORT_MAX + 1] = {
 	[NET_DM_ATTR_PORT_NETDEV_IFINDEX]	= { .type = NLA_U32 },
+};
+
+static struct nla_policy net_dm_stats_policy[NET_DM_ATTR_STATS_MAX + 1] = {
+	[NET_DM_ATTR_STATS_DROPPED]		= { .type = NLA_U64 },
 };
 
 void sigint_handler(int signum)
@@ -479,6 +489,42 @@ out_free:
 	free_netlink_msg(msg);
 }
 
+void print_nested_stats(struct nlattr *attr)
+{
+	struct nlattr *attrs[NET_DM_ATTR_STATS_MAX + 1];
+	int err;
+
+	err = nla_parse_nested(attrs, NET_DM_ATTR_STATS_MAX, attr,
+			       net_dm_stats_policy);
+	if (err)
+		return;
+
+	if (attrs[NET_DM_ATTR_STATS_DROPPED])
+		printf("Tail dropped: %lu\n",
+		       nla_get_u64(attrs[NET_DM_ATTR_STATS_DROPPED]));
+}
+
+void handle_dm_stats_new_msg(struct netlink_message *msg, int err)
+{
+	struct nlattr *attrs[NET_DM_ATTR_MAX + 1];
+
+	if (state != STATE_STATS_GETTING)
+		goto out_free;
+
+	err = genlmsg_parse(msg->msg, 0, attrs, NET_DM_ATTR_MAX, net_dm_policy);
+	if (err)
+		goto out_free;
+
+	if (attrs[NET_DM_ATTR_STATS]) {
+		printf("Software statistics:\n");
+		print_nested_stats(attrs[NET_DM_ATTR_STATS]);
+	}
+
+out_free:
+	state = STATE_IDLE;
+	free_netlink_msg(msg);
+}
+
 void handle_dm_config_msg(struct netlink_message *amsg, struct netlink_message *msg, int err)
 {
 	if (err != 0) {
@@ -654,6 +700,17 @@ int get_config()
 	return send_netlink_message(msg);
 }
 
+int get_stats()
+{
+	struct netlink_message *msg;
+
+	msg = alloc_netlink_msg(NET_DM_CMD_STATS_GET, NLM_F_REQUEST, 0);
+	if (!msg)
+		return -ENOMEM;
+
+	return send_netlink_message(msg);
+}
+
 void display_help()
 {
 	printf("Command Syntax:\n");
@@ -669,6 +726,7 @@ void display_help()
 	printf("start\t\t\t\t - start capture\n");
 	printf("stop\t\t\t\t - stop capture\n");
 	printf("show\t\t\t\t - show existing configuration\n");
+	printf("stats\t\t\t\t - show statistics\n");
 }
 
 void enter_command_line_mode()
@@ -734,6 +792,11 @@ void enter_command_line_mode()
 
 		if (!strncmp(input, "show", 4)) {
 			state = STATE_RQST_CONFIG;
+			break;
+		}
+
+		if (!strncmp(input, "stats", 5)) {
+			state = STATE_RQST_STATS;
 			break;
 		}
 next_input:
@@ -838,6 +901,19 @@ void enter_state_loop(void)
 			break;
 		case STATE_CONFIG_GETTING:
 			printf("Waiting for existing configuration query response\n");
+			break;
+		case STATE_RQST_STATS:
+			printf("Getting statistics\n");
+			if (get_stats() < 0) {
+				perror("Failed to get statistics");
+				state = STATE_FAILED;
+			} else {
+				state = STATE_STATS_GETTING;
+				should_rx = 1;
+			}
+			break;
+		case STATE_STATS_GETTING:
+			printf("Waiting for statistics query response\n");
 			break;
 		default:
 			printf("Unknown state received!  exiting!\n");
