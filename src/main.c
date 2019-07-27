@@ -65,6 +65,7 @@ struct ack_list ack_list_head = {NULL};
 unsigned long alimit = 0;
 unsigned long acount = 0;
 unsigned long trunc_len = 0;
+unsigned long queue_len = 0;
 
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_packet_alert_msg(struct netlink_message *msg, int err);
@@ -99,6 +100,8 @@ enum {
 	STATE_ALERT_MODE_SETTING,
 	STATE_RQST_TRUNC_LEN,
 	STATE_TRUNC_LEN_SETTING,
+	STATE_RQST_QUEUE_LEN,
+	STATE_QUEUE_LEN_SETTING,
 };
 
 static int state = STATE_IDLE;
@@ -449,6 +452,10 @@ void handle_dm_config_msg(struct netlink_message *amsg, struct netlink_message *
 		printf("Truncation length successfully set\n");
 		state = STATE_IDLE;
 		break;
+	case STATE_QUEUE_LEN_SETTING:
+		printf("Queue length successfully set\n");
+		state = STATE_IDLE;
+		break;
 	default:
 		printf("Received acknowledgement for non-solicited config request\n");
 		state = STATE_FAILED;
@@ -570,6 +577,26 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
+int set_queue_len()
+{
+	struct netlink_message *msg;
+
+	msg = alloc_netlink_msg(NET_DM_CMD_CONFIG, NLM_F_REQUEST|NLM_F_ACK, 0);
+	if (!msg)
+		return -ENOMEM;
+
+	if (nla_put_u32(msg->nlbuf, NET_DM_ATTR_QUEUE_LEN, queue_len))
+		goto nla_put_failure;
+
+	set_ack_cb(msg, handle_dm_config_msg);
+
+	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
+}
+
 void display_help()
 {
 	printf("Command Syntax:\n");
@@ -579,6 +606,8 @@ void display_help()
 	printf("\talertlimit <number>\t - caputre only this many alert packets\n");
 	printf("\talertmode <mode>\t - set mode to \"summary\" or \"packet\"\n");
 	printf("\ttrunc <len>\t\t - truncate packets to this length. ");
+	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
+	printf("\tqueue <len>\t\t - queue up to this many packets in the kernel. ");
 	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
 	printf("start\t\t\t\t - start capture\n");
 	printf("stop\t\t\t\t - stop capture\n");
@@ -637,6 +666,10 @@ void enter_command_line_mode()
 			} else if (!strncmp(ninput, "trunc", 5)) {
 				trunc_len = strtoul(ninput + 6, NULL, 10);
 				state = STATE_RQST_TRUNC_LEN;
+				break;
+			} else if (!strncmp(ninput, "queue", 5)) {
+				queue_len = strtoul(ninput + 6, NULL, 10);
+				state = STATE_RQST_QUEUE_LEN;
 				break;
 			}
 		}
@@ -716,6 +749,19 @@ void enter_state_loop(void)
 			break;
 		case STATE_TRUNC_LEN_SETTING:
 			printf("Waiting for truncation length setting ack...\n");
+			break;
+		case STATE_RQST_QUEUE_LEN:
+			printf("Setting queue length to %lu\n", queue_len);
+			if (set_queue_len() < 0) {
+				perror("Failed to set queue length");
+				state = STATE_FAILED;
+			} else {
+				state = STATE_QUEUE_LEN_SETTING;
+				should_rx = 1;
+			}
+			break;
+		case STATE_QUEUE_LEN_SETTING:
+			printf("Waiting for queue length setting ack...\n");
 			break;
 		default:
 			printf("Unknown state received!  exiting!\n");
