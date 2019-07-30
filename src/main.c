@@ -128,6 +128,7 @@ static struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
 	[NET_DM_ATTR_ORIG_LEN]			= { .type = NLA_U32 },
 	[NET_DM_ATTR_QUEUE_LEN]			= { .type = NLA_U32 },
 	[NET_DM_ATTR_STATS]			= { .type = NLA_NESTED },
+	[NET_DM_ATTR_HW_STATS]			= { .type = NLA_NESTED },
 	[NET_DM_ATTR_ORIGIN]			= { .type = NLA_U16 },
 	[NET_DM_ATTR_HW_TRAP_GROUP_NAME]	= { .type = NLA_STRING },
 	[NET_DM_ATTR_HW_TRAP_NAME]		= { .type = NLA_STRING },
@@ -602,6 +603,11 @@ void handle_dm_stats_new_msg(struct netlink_message *msg, int err)
 	if (attrs[NET_DM_ATTR_STATS]) {
 		printf("Software statistics:\n");
 		print_nested_stats(attrs[NET_DM_ATTR_STATS]);
+	}
+
+	if (attrs[NET_DM_ATTR_HW_STATS]) {
+		printf("Hardware statistics:\n");
+		print_nested_stats(attrs[NET_DM_ATTR_HW_STATS]);
 	}
 
 out_free:
