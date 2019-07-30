@@ -62,6 +62,14 @@ preparing a netlink message for each. This setting controls the queue's length.
 By default this is limited by the kernel to 1,000 packets. Increasing this
 value will increase the memory utilization of the system.
 .TP
+.BR "set sw " "{ " true " | " false " }"
+Enables or disables the monitoring of software originated drops. By default
+software originated drops are monitored.
+.TP
+.BR "set hw " "{ " true " | " false " }"
+Enables or disables the monitoring of hardware originated drops. By default
+hardware originated drops are not monitored.
+.TP
 .B show
 Query existing configuration from the kernel and show it.
 .TP

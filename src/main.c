@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <getopt.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -66,6 +67,8 @@ unsigned long alimit = 0;
 unsigned long acount = 0;
 unsigned long trunc_len = 0;
 unsigned long queue_len = 0;
+bool monitor_sw = false;
+bool monitor_hw = false;
 
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_packet_alert_msg(struct netlink_message *msg, int err);
@@ -145,6 +148,20 @@ static struct nla_policy net_dm_port_policy[NET_DM_ATTR_PORT_MAX + 1] = {
 static struct nla_policy net_dm_stats_policy[NET_DM_ATTR_STATS_MAX + 1] = {
 	[NET_DM_ATTR_STATS_DROPPED]		= { .type = NLA_U64 },
 };
+
+int strtobool(const char *str, bool *p_val)
+{
+	bool val;
+
+	if (!strcmp(str, "true") || !strcmp(str, "1"))
+		val = true;
+	else if (!strcmp(str, "false") || !strcmp(str, "0"))
+		val = false;
+	else
+		return -EINVAL;
+	*p_val = val;
+	return 0;
+}
 
 void sigint_handler(int signum)
 {
@@ -691,9 +708,19 @@ int enable_drop_monitor()
 
 	msg = alloc_netlink_msg(NET_DM_CMD_START, NLM_F_REQUEST|NLM_F_ACK, 0);
 
+	if (monitor_sw && nla_put_flag(msg->nlbuf, NET_DM_ATTR_SW_DROPS))
+		goto nla_put_failure;
+
+	if (monitor_hw && nla_put_flag(msg->nlbuf, NET_DM_ATTR_HW_DROPS))
+		goto nla_put_failure;
+
 	set_ack_cb(msg, handle_dm_start_msg);
 
 	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
 }
 
 int disable_drop_monitor()
@@ -702,9 +729,19 @@ int disable_drop_monitor()
 
 	msg = alloc_netlink_msg(NET_DM_CMD_STOP, NLM_F_REQUEST|NLM_F_ACK, 0);
 
+	if (monitor_sw && nla_put_flag(msg->nlbuf, NET_DM_ATTR_SW_DROPS))
+		goto nla_put_failure;
+
+	if (monitor_hw && nla_put_flag(msg->nlbuf, NET_DM_ATTR_HW_DROPS))
+		goto nla_put_failure;
+
 	set_ack_cb(msg, handle_dm_stop_msg);
 
 	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
 }
 
 int set_alert_mode()
@@ -813,6 +850,8 @@ void display_help()
 	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
 	printf("\tqueue <len>\t\t - queue up to this many packets in the kernel. ");
 	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
+	printf("\tsw <true | false>\t - monitor software drops\n");
+	printf("\thw <true | false>\t - monitor hardware drops\n");
 	printf("start\t\t\t\t - start capture\n");
 	printf("stop\t\t\t\t - stop capture\n");
 	printf("show\t\t\t\t - show existing configuration\n");
@@ -822,6 +861,7 @@ void display_help()
 void enter_command_line_mode()
 {
 	char *input;
+	int err;
 
 	do {
 		input = readline("dropwatch> ");
@@ -877,6 +917,26 @@ void enter_command_line_mode()
 				queue_len = strtoul(ninput + 6, NULL, 10);
 				state = STATE_RQST_QUEUE_LEN;
 				break;
+			} else if (!strncmp(ninput, "sw", 2)) {
+				err = strtobool(ninput + 3, &monitor_sw);
+				if (err) {
+					printf("invalid boolean value\n");
+					state = STATE_FAILED;
+					break;
+				}
+				printf("setting software drops monitoring to %d\n",
+				       monitor_sw);
+				goto next_input;
+			} else if (!strncmp(ninput, "hw", 2)) {
+				err = strtobool(ninput + 3, &monitor_hw);
+				if (err) {
+					printf("invalid boolean value\n");
+					state = STATE_FAILED;
+					break;
+				}
+				printf("setting hardware drops monitoring to %d\n",
+				       monitor_hw);
+				goto next_input;
 			}
 		}
 
