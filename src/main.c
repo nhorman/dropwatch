@@ -128,10 +128,14 @@ static struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
 	[NET_DM_ATTR_ORIG_LEN]			= { .type = NLA_U32 },
 	[NET_DM_ATTR_QUEUE_LEN]			= { .type = NLA_U32 },
 	[NET_DM_ATTR_STATS]			= { .type = NLA_NESTED },
+	[NET_DM_ATTR_ORIGIN]			= { .type = NLA_U16 },
+	[NET_DM_ATTR_HW_TRAP_GROUP_NAME]	= { .type = NLA_STRING },
+	[NET_DM_ATTR_HW_TRAP_NAME]		= { .type = NLA_STRING },
 };
 
 static struct nla_policy net_dm_port_policy[NET_DM_ATTR_PORT_MAX + 1] = {
 	[NET_DM_ATTR_PORT_NETDEV_IFINDEX]	= { .type = NLA_U32 },
+	[NET_DM_ATTR_PORT_NETDEV_NAME]		= { .type = NLA_STRING },
 };
 
 static struct nla_policy net_dm_stats_policy[NET_DM_ATTR_STATS_MAX + 1] = {
@@ -392,6 +396,31 @@ void print_nested_port(struct nlattr *attr, const char *dir)
 	if (attrs[NET_DM_ATTR_PORT_NETDEV_IFINDEX])
 		printf("%s port ifindex: %d\n", dir,
 		       nla_get_u32(attrs[NET_DM_ATTR_PORT_NETDEV_IFINDEX]));
+
+	if (attrs[NET_DM_ATTR_PORT_NETDEV_NAME])
+		printf("%s port name: %s\n", dir,
+		       nla_get_string(attrs[NET_DM_ATTR_PORT_NETDEV_NAME]));
+}
+
+void print_packet_origin(struct nlattr *attr)
+{
+	const char *origin;
+	uint16_t val;
+
+	val = nla_get_u16(attr);
+	switch (val) {
+	case NET_DM_ORIGIN_SW:
+		origin = "software";
+		break;
+	case NET_DM_ORIGIN_HW:
+		origin = "hardware";
+		break;
+	default:
+		origin = "unknown";
+		break;
+	}
+
+	printf("origin: %s\n", origin);
 }
 
 void handle_dm_packet_alert_msg(struct netlink_message *msg, int err)
@@ -409,6 +438,14 @@ void handle_dm_packet_alert_msg(struct netlink_message *msg, int err)
 		printf("drop at: %s (%p)\n",
 		       nla_get_string(attrs[NET_DM_ATTR_SYMBOL]),
 		       (void *) nla_get_u64(attrs[NET_DM_ATTR_PC]));
+	else if (attrs[NET_DM_ATTR_HW_TRAP_GROUP_NAME] &&
+		 attrs[NET_DM_ATTR_HW_TRAP_NAME])
+		printf("drop at: %s (%s)\n",
+		       nla_get_string(attrs[NET_DM_ATTR_HW_TRAP_NAME]),
+		       nla_get_string(attrs[NET_DM_ATTR_HW_TRAP_GROUP_NAME]));
+
+	if (attrs[NET_DM_ATTR_ORIGIN])
+		print_packet_origin(attrs[NET_DM_ATTR_ORIGIN]);
 
 	if (attrs[NET_DM_ATTR_IN_PORT])
 		print_nested_port(attrs[NET_DM_ATTR_IN_PORT], "input");
