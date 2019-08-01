@@ -28,7 +28,6 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <sys/utsname.h>
-#include <bfd.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>

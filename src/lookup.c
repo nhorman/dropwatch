@@ -30,7 +30,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/utsname.h>
+#ifdef HAVE_BFD_H
 #include <bfd.h>
+#endif
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -38,7 +40,9 @@
 
 #include "lookup.h"
 
+#ifdef HAVE_BFD_H
 extern struct lookup_methods bfd_methods;
+#endif
 extern struct lookup_methods kallsym_methods;
 
 static int lookup_null_init(void)
@@ -75,17 +79,21 @@ int init_lookup(lookup_init_method_t method)
 		methods = &null_methods;
 		break;
 	case METHOD_AUTO:
+#ifdef HAVE_BFD_H
 		methods = &bfd_methods;
 		if (methods->lookup_init() == 0)
 			return 0;
+#endif
 		methods = &kallsym_methods;
 		if (methods->lookup_init() == 0)
 			return 0;
 		methods = NULL;
 		return -1;
+#ifdef HAVE_BFD_H
 	case METHOD_DEBUGINFO:
 		methods = &bfd_methods;
 		break;
+#endif
 	case METHOD_KALLSYMS:
 		methods = &kallsym_methods;
 		break;
