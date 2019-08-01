@@ -25,6 +25,8 @@
  * 2) /proc/kallsyms
  */
 
+#include "config.h"
+
 #include <stdlib.h>
 #include <asm/types.h>
 
@@ -44,7 +46,9 @@
 typedef enum {
 	METHOD_NULL = 0,
 	METHOD_AUTO,
+#ifdef HAVE_BFD_H
 	METHOD_DEBUGINFO,
+#endif
 	METHOD_KALLSYMS
 } lookup_init_method_t;
 
