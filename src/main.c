@@ -131,6 +131,9 @@ static struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
 	[NET_DM_ATTR_ORIGIN]			= { .type = NLA_U16 },
 	[NET_DM_ATTR_HW_TRAP_GROUP_NAME]	= { .type = NLA_STRING },
 	[NET_DM_ATTR_HW_TRAP_NAME]		= { .type = NLA_STRING },
+	[NET_DM_ATTR_HW_ENTRIES]		= { .type = NLA_NESTED },
+	[NET_DM_ATTR_HW_ENTRY]			= { .type = NLA_NESTED },
+	[NET_DM_ATTR_HW_TRAP_COUNT]		= { .type = NLA_U32 },
 };
 
 static struct nla_policy net_dm_port_policy[NET_DM_ATTR_PORT_MAX + 1] = {
@@ -350,6 +353,42 @@ void process_rx_message(void)
 	return;
 }
 
+void print_nested_hw_entry(struct nlattr *hw_entry)
+{
+	struct nlattr *attrs[NET_DM_ATTR_MAX + 1];
+	int err;
+
+	err = nla_parse_nested(attrs, NET_DM_ATTR_MAX, hw_entry, net_dm_policy);
+	if (err)
+		return;
+
+	if (!attrs[NET_DM_ATTR_HW_TRAP_NAME] ||
+	    !attrs[NET_DM_ATTR_HW_TRAP_COUNT])
+		return;
+
+	printf("%d drops at %s [hardware]\n",
+	       nla_get_u32(attrs[NET_DM_ATTR_HW_TRAP_COUNT]),
+	       nla_get_string(attrs[NET_DM_ATTR_HW_TRAP_NAME]));
+}
+
+void print_nested_hw_entries(struct nlattr *hw_entries)
+{
+	struct nlattr *attr;
+	int rem;
+
+	nla_for_each_nested(attr, hw_entries, rem) {
+		if (nla_type(attr) != NET_DM_ATTR_HW_ENTRY)
+			continue;
+		print_nested_hw_entry(attr);
+
+		acount++;
+		if (alimit && (acount == alimit)) {
+			printf("Alert limit reached, deactivating!\n");
+			state = STATE_RQST_DEACTIVATE;
+		}
+	}
+}
+
 /*
  * These are the received message handlers
  */
@@ -360,17 +399,22 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 	struct genlmsghdr *glh = nlmsg_data(nlh);
 	struct loc_result res;
 	struct net_dm_alert_msg *alert = nla_data(genlmsg_data(glh));
+	struct nlattr *attrs[NET_DM_ATTR_MAX + 1];
 
 	if (state != STATE_RECEIVING)
+		goto out_free;
+
+	err = genlmsg_parse(msg->msg, 0, attrs, NET_DM_ATTR_MAX, net_dm_policy);
+	if (err)
 		goto out_free;
 
 	for (i=0; i < alert->entries; i++) {
 		void *location;
 		memcpy(&location, alert->points[i].pc, sizeof(void *));
 		if (lookup_symbol(location, &res))
-			printf ("%d drops at location %p\n", alert->points[i].count, location);
+			printf ("%d drops at location %p [software]\n", alert->points[i].count, location);
 		else
-			printf ("%d drops at %s+%llx (%p)\n",
+			printf ("%d drops at %s+%llx (%p) [software]\n",
 				alert->points[i].count, res.symbol, (unsigned long long)res.offset, location);
 		acount++;
 		if (alimit && (acount == alimit)) {
@@ -378,6 +422,9 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 			state = STATE_RQST_DEACTIVATE;
 		}
 	}
+
+	if (attrs[NET_DM_ATTR_HW_ENTRIES])
+		print_nested_hw_entries(attrs[NET_DM_ATTR_HW_ENTRIES]);
 
 out_free:
 	free_netlink_msg(msg);
