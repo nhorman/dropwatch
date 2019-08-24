@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009, Neil Horman <nhorman@redhat.com>
- * 
+ *
  * This program file is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
  * Free Software Foundation; version 2 of the License.
@@ -26,6 +26,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdint.h>
+#include <stdbool.h>
 #include <getopt.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -64,20 +65,31 @@ struct ack_list ack_list_head = {NULL};
 
 unsigned long alimit = 0;
 unsigned long acount = 0;
+unsigned long trunc_len = 0;
+unsigned long queue_len = 0;
+bool monitor_sw = false;
+bool monitor_hw = false;
 
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
-void handle_dm_config_msg(struct netlink_message *msg, int err);
+void handle_dm_packet_alert_msg(struct netlink_message *msg, int err);
+void handle_dm_config_new_msg(struct netlink_message *msg, int err);
+void handle_dm_stats_new_msg(struct netlink_message *msg, int err);
+void handle_dm_config_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 int disable_drop_monitor();
 
-
 static void(*type_cb[_NET_DM_CMD_MAX])(struct netlink_message *, int err) = {
 	NULL,
 	handle_dm_alert_msg,
-	handle_dm_config_msg,
 	NULL,
-	NULL
+	NULL,
+	NULL,
+	handle_dm_packet_alert_msg,
+	NULL,
+	handle_dm_config_new_msg,
+	NULL,
+	handle_dm_stats_new_msg,
 };
 
 static struct nl_sock *nsd;
@@ -92,9 +104,64 @@ enum {
 	STATE_DEACTIVATING,
 	STATE_FAILED,
 	STATE_EXIT,
+	STATE_RQST_ALERT_MODE_SUMMARY,
+	STATE_RQST_ALERT_MODE_PACKET,
+	STATE_ALERT_MODE_SETTING,
+	STATE_RQST_TRUNC_LEN,
+	STATE_TRUNC_LEN_SETTING,
+	STATE_RQST_QUEUE_LEN,
+	STATE_QUEUE_LEN_SETTING,
+	STATE_RQST_CONFIG,
+	STATE_CONFIG_GETTING,
+	STATE_RQST_STATS,
+	STATE_STATS_GETTING,
 };
 
 static int state = STATE_IDLE;
+
+static struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
+	[NET_DM_ATTR_ALERT_MODE]		= { .type = NLA_U8 },
+	[NET_DM_ATTR_PC]			= { .type = NLA_U64 },
+	[NET_DM_ATTR_SYMBOL]			= { .type = NLA_STRING },
+	[NET_DM_ATTR_IN_PORT]			= { .type = NLA_NESTED },
+	[NET_DM_ATTR_TIMESTAMP]			= { .type = NLA_U64 },
+	[NET_DM_ATTR_PROTO]			= { .type = NLA_U16 },
+	[NET_DM_ATTR_PAYLOAD]			= { .type = NLA_UNSPEC },
+	[NET_DM_ATTR_TRUNC_LEN]			= { .type = NLA_U32 },
+	[NET_DM_ATTR_ORIG_LEN]			= { .type = NLA_U32 },
+	[NET_DM_ATTR_QUEUE_LEN]			= { .type = NLA_U32 },
+	[NET_DM_ATTR_STATS]			= { .type = NLA_NESTED },
+	[NET_DM_ATTR_HW_STATS]			= { .type = NLA_NESTED },
+	[NET_DM_ATTR_ORIGIN]			= { .type = NLA_U16 },
+	[NET_DM_ATTR_HW_TRAP_GROUP_NAME]	= { .type = NLA_STRING },
+	[NET_DM_ATTR_HW_TRAP_NAME]		= { .type = NLA_STRING },
+	[NET_DM_ATTR_HW_ENTRIES]		= { .type = NLA_NESTED },
+	[NET_DM_ATTR_HW_ENTRY]			= { .type = NLA_NESTED },
+	[NET_DM_ATTR_HW_TRAP_COUNT]		= { .type = NLA_U32 },
+};
+
+static struct nla_policy net_dm_port_policy[NET_DM_ATTR_PORT_MAX + 1] = {
+	[NET_DM_ATTR_PORT_NETDEV_IFINDEX]	= { .type = NLA_U32 },
+	[NET_DM_ATTR_PORT_NETDEV_NAME]		= { .type = NLA_STRING },
+};
+
+static struct nla_policy net_dm_stats_policy[NET_DM_ATTR_STATS_MAX + 1] = {
+	[NET_DM_ATTR_STATS_DROPPED]		= { .type = NLA_U64 },
+};
+
+int strtobool(const char *str, bool *p_val)
+{
+	bool val;
+
+	if (!strcmp(str, "true") || !strcmp(str, "1"))
+		val = true;
+	else if (!strcmp(str, "false") || !strcmp(str, "0"))
+		val = false;
+	else
+		return -EINVAL;
+	*p_val = val;
+	return 0;
+}
 
 void sigint_handler(int signum)
 {
@@ -102,10 +169,10 @@ void sigint_handler(int signum)
 	   (state == STATE_RQST_DEACTIVATE)) {
 		disable_drop_monitor();
 		state = STATE_DEACTIVATING;
-	}
-	else
+	} else {
 		printf("Got a sigint while not receiving\n");
-	return;	
+	}
+	return;
 }
 
 struct nl_sock *setup_netlink_socket()
@@ -113,7 +180,6 @@ struct nl_sock *setup_netlink_socket()
 	struct nl_sock *sd;
 	int family;
 
-	
 	sd = nl_socket_alloc();
 
 	genl_connect(sd);
@@ -141,7 +207,6 @@ out_close:
 	nl_close(sd);
 	nl_socket_free(sd);
 	return NULL;
-
 }
 
 struct netlink_message *alloc_netlink_msg(uint32_t type, uint16_t flags, size_t size)
@@ -155,7 +220,7 @@ struct netlink_message *alloc_netlink_msg(uint32_t type, uint16_t flags, size_t 
 		return NULL;
 
 	msg->refcnt = 1;
-	msg->nlbuf = nlmsg_alloc(); 
+	msg->nlbuf = nlmsg_alloc();
 	msg->msg = genlmsg_put(msg->nlbuf, 0, seq, nsf, size, flags, type, 1);
 
 	msg->ack_cb = NULL;
@@ -167,7 +232,6 @@ struct netlink_message *alloc_netlink_msg(uint32_t type, uint16_t flags, size_t 
 void set_ack_cb(struct netlink_message *msg,
 			void (*cb)(struct netlink_message *, struct netlink_message *, int))
 {
-
 	if (msg->ack_cb)
 		return;
 
@@ -176,7 +240,6 @@ void set_ack_cb(struct netlink_message *msg,
 	LIST_INSERT_HEAD(&ack_list_head, msg, ack_list_element);
 }
 
-		
 struct netlink_message *wrap_netlink_msg(struct nlmsghdr *buf)
 {
 	struct netlink_message *msg;
@@ -228,7 +291,7 @@ struct netlink_message *recv_netlink_message(int *err)
 
 	do {
 		rc = nl_recv(nsd, &nla, &buf, NULL);
-		if (rc < 0) {	
+		if (rc < 0) {
 			switch (errno) {
 			case EINTR:
 				/*
@@ -259,8 +322,8 @@ struct netlink_message *recv_netlink_message(int *err)
 			if (am->seq == errm->msg.nlmsg_seq)
 				break;
 		}
-	
-		if (am) {	
+
+		if (am) {
 			LIST_REMOVE(am, ack_list_element);
 			am->ack_cb(msg, am, errm->error);
 			free_netlink_msg(am);
@@ -274,16 +337,16 @@ struct netlink_message *recv_netlink_message(int *err)
 
 	glm = nlmsg_data(msg->msg);
 	type = glm->cmd;
-	
+
 	if ((type > NET_DM_CMD_MAX) ||
 	    (type <= NET_DM_CMD_UNSPEC)) {
-		printf("Received message of unknown type %d\n", 
+		printf("Received message of unknown type %d\n",
 			type);
 		free_netlink_msg(msg);
 		return NULL;
 	}
 
-	return msg;	
+	return msg;
 }
 
 void process_rx_message(void)
@@ -302,13 +365,47 @@ void process_rx_message(void)
 	if (msg) {
 		struct nlmsghdr *nlh = msg->msg;
 		struct genlmsghdr *glh = nlmsg_data(nlh);
-		type  = glh->cmd; 
+		type = glh->cmd;
 		type_cb[type](msg, err);
 	}
 	return;
 }
 
+void print_nested_hw_entry(struct nlattr *hw_entry)
+{
+	struct nlattr *attrs[NET_DM_ATTR_MAX + 1];
+	int err;
 
+	err = nla_parse_nested(attrs, NET_DM_ATTR_MAX, hw_entry, net_dm_policy);
+	if (err)
+		return;
+
+	if (!attrs[NET_DM_ATTR_HW_TRAP_NAME] ||
+	    !attrs[NET_DM_ATTR_HW_TRAP_COUNT])
+		return;
+
+	printf("%d drops at %s [hardware]\n",
+	       nla_get_u32(attrs[NET_DM_ATTR_HW_TRAP_COUNT]),
+	       nla_get_string(attrs[NET_DM_ATTR_HW_TRAP_NAME]));
+}
+
+void print_nested_hw_entries(struct nlattr *hw_entries)
+{
+	struct nlattr *attr;
+	int rem;
+
+	nla_for_each_nested(attr, hw_entries, rem) {
+		if (nla_type(attr) != NET_DM_ATTR_HW_ENTRY)
+			continue;
+		print_nested_hw_entry(attr);
+
+		acount++;
+		if (alimit && (acount == alimit)) {
+			printf("Alert limit reached, deactivating!\n");
+			state = STATE_RQST_DEACTIVATE;
+		}
+	}
+}
 
 /*
  * These are the received message handlers
@@ -320,34 +417,248 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 	struct genlmsghdr *glh = nlmsg_data(nlh);
 	struct loc_result res;
 	struct net_dm_alert_msg *alert = nla_data(genlmsg_data(glh));
+	struct nlattr *attrs[NET_DM_ATTR_MAX + 1];
 
 	if (state != STATE_RECEIVING)
 		goto out_free;
 
-
+	err = genlmsg_parse(msg->msg, 0, attrs, NET_DM_ATTR_MAX, net_dm_policy);
+	if (err)
+		goto out_free;
 
 	for (i=0; i < alert->entries; i++) {
 		void *location;
 		memcpy(&location, alert->points[i].pc, sizeof(void *));
 		if (lookup_symbol(location, &res))
-			printf ("%d drops at location %p\n", alert->points[i].count, location);
+			printf ("%d drops at location %p [software]\n", alert->points[i].count, location);
 		else
-			printf ("%d drops at %s+%llx (%p)\n",
+			printf ("%d drops at %s+%llx (%p) [software]\n",
 				alert->points[i].count, res.symbol, (unsigned long long)res.offset, location);
 		acount++;
 		if (alimit && (acount == alimit)) {
 			printf("Alert limit reached, deactivating!\n");
 			state = STATE_RQST_DEACTIVATE;
 		}
-	}	
+	}
+
+	if (attrs[NET_DM_ATTR_HW_ENTRIES])
+		print_nested_hw_entries(attrs[NET_DM_ATTR_HW_ENTRIES]);
 
 out_free:
 	free_netlink_msg(msg);
 }
 
-void handle_dm_config_msg(struct netlink_message *msg, int err)
+void print_nested_port(struct nlattr *attr, const char *dir)
 {
-	printf("Got a config message\n");
+	struct nlattr *attrs[NET_DM_ATTR_PORT_MAX + 1];
+	int err;
+
+	err = nla_parse_nested(attrs, NET_DM_ATTR_PORT_MAX, attr,
+			       net_dm_port_policy);
+	if (err)
+		return;
+
+	if (attrs[NET_DM_ATTR_PORT_NETDEV_IFINDEX])
+		printf("%s port ifindex: %d\n", dir,
+		       nla_get_u32(attrs[NET_DM_ATTR_PORT_NETDEV_IFINDEX]));
+
+	if (attrs[NET_DM_ATTR_PORT_NETDEV_NAME])
+		printf("%s port name: %s\n", dir,
+		       nla_get_string(attrs[NET_DM_ATTR_PORT_NETDEV_NAME]));
+}
+
+void print_packet_origin(struct nlattr *attr)
+{
+	const char *origin;
+	uint16_t val;
+
+	val = nla_get_u16(attr);
+	switch (val) {
+	case NET_DM_ORIGIN_SW:
+		origin = "software";
+		break;
+	case NET_DM_ORIGIN_HW:
+		origin = "hardware";
+		break;
+	default:
+		origin = "unknown";
+		break;
+	}
+
+	printf("origin: %s\n", origin);
+}
+
+void handle_dm_packet_alert_msg(struct netlink_message *msg, int err)
+{
+	struct nlattr *attrs[NET_DM_ATTR_MAX + 1];
+
+	if (state != STATE_RECEIVING)
+		goto out_free;
+
+	err = genlmsg_parse(msg->msg, 0, attrs, NET_DM_ATTR_MAX, net_dm_policy);
+	if (err)
+		goto out_free;
+
+	if (attrs[NET_DM_ATTR_PC] && attrs[NET_DM_ATTR_SYMBOL])
+		printf("drop at: %s (%p)\n",
+		       nla_get_string(attrs[NET_DM_ATTR_SYMBOL]),
+		       (void *) nla_get_u64(attrs[NET_DM_ATTR_PC]));
+	else if (attrs[NET_DM_ATTR_HW_TRAP_GROUP_NAME] &&
+		 attrs[NET_DM_ATTR_HW_TRAP_NAME])
+		printf("drop at: %s (%s)\n",
+		       nla_get_string(attrs[NET_DM_ATTR_HW_TRAP_NAME]),
+		       nla_get_string(attrs[NET_DM_ATTR_HW_TRAP_GROUP_NAME]));
+
+	if (attrs[NET_DM_ATTR_ORIGIN])
+		print_packet_origin(attrs[NET_DM_ATTR_ORIGIN]);
+
+	if (attrs[NET_DM_ATTR_IN_PORT])
+		print_nested_port(attrs[NET_DM_ATTR_IN_PORT], "input");
+
+	if (attrs[NET_DM_ATTR_TIMESTAMP]) {
+		time_t tv_sec;
+		struct tm *tm;
+		uint64_t ts;
+		char *tstr;
+
+		ts = nla_get_u64(attrs[NET_DM_ATTR_TIMESTAMP]);
+		tv_sec = ts / 1000000000;
+		tm = localtime(&tv_sec);
+
+		tstr = asctime(tm);
+		tstr[strlen(tstr) - 1] = 0;
+		printf("timestamp: %s %09ld nsec\n", tstr, ts % 1000000000);
+	}
+
+	if (attrs[NET_DM_ATTR_PROTO])
+		printf("protocol: 0x%x\n",
+		       nla_get_u16(attrs[NET_DM_ATTR_PROTO]));
+
+	if (attrs[NET_DM_ATTR_PAYLOAD])
+		printf("length: %u\n", nla_len(attrs[NET_DM_ATTR_PAYLOAD]));
+
+	if (attrs[NET_DM_ATTR_ORIG_LEN])
+		printf("original length: %u\n",
+		       nla_get_u32(attrs[NET_DM_ATTR_ORIG_LEN]));
+
+	printf("\n");
+
+	acount++;
+	if (alimit && (acount == alimit)) {
+		printf("Alert limit reached, deactivating!\n");
+		state = STATE_RQST_DEACTIVATE;
+	}
+
+out_free:
+	free_netlink_msg(msg);
+}
+
+void handle_dm_config_new_msg(struct netlink_message *msg, int err)
+{
+	struct nlattr *attrs[NET_DM_ATTR_MAX + 1];
+
+	if (state != STATE_CONFIG_GETTING)
+		goto out_free;
+
+	err = genlmsg_parse(msg->msg, 0, attrs, NET_DM_ATTR_MAX, net_dm_policy);
+	if (err)
+		goto out_free;
+
+	if (!attrs[NET_DM_ATTR_ALERT_MODE] || !attrs[NET_DM_ATTR_TRUNC_LEN] ||
+	    !attrs[NET_DM_ATTR_QUEUE_LEN])
+		goto out_free;
+
+	printf("Alert mode: ");
+	switch (nla_get_u8(attrs[NET_DM_ATTR_ALERT_MODE])) {
+	case NET_DM_ALERT_MODE_SUMMARY:
+		printf("Summary\n");
+		break;
+	case NET_DM_ALERT_MODE_PACKET:
+		printf("Packet\n");
+		break;
+	default:
+		printf("Invalid alert mode\n");
+		break;
+	}
+
+	printf("Truncation length: %u\n",
+	       nla_get_u32(attrs[NET_DM_ATTR_TRUNC_LEN]));
+
+	printf("Queue length: %u\n", nla_get_u32(attrs[NET_DM_ATTR_QUEUE_LEN]));
+
+out_free:
+	state = STATE_IDLE;
+	free_netlink_msg(msg);
+}
+
+void print_nested_stats(struct nlattr *attr)
+{
+	struct nlattr *attrs[NET_DM_ATTR_STATS_MAX + 1];
+	int err;
+
+	err = nla_parse_nested(attrs, NET_DM_ATTR_STATS_MAX, attr,
+			       net_dm_stats_policy);
+	if (err)
+		return;
+
+	if (attrs[NET_DM_ATTR_STATS_DROPPED])
+		printf("Tail dropped: %lu\n",
+		       nla_get_u64(attrs[NET_DM_ATTR_STATS_DROPPED]));
+}
+
+void handle_dm_stats_new_msg(struct netlink_message *msg, int err)
+{
+	struct nlattr *attrs[NET_DM_ATTR_MAX + 1];
+
+	if (state != STATE_STATS_GETTING)
+		goto out_free;
+
+	err = genlmsg_parse(msg->msg, 0, attrs, NET_DM_ATTR_MAX, net_dm_policy);
+	if (err)
+		goto out_free;
+
+	if (attrs[NET_DM_ATTR_STATS]) {
+		printf("Software statistics:\n");
+		print_nested_stats(attrs[NET_DM_ATTR_STATS]);
+	}
+
+	if (attrs[NET_DM_ATTR_HW_STATS]) {
+		printf("Hardware statistics:\n");
+		print_nested_stats(attrs[NET_DM_ATTR_HW_STATS]);
+	}
+
+out_free:
+	state = STATE_IDLE;
+	free_netlink_msg(msg);
+}
+
+void handle_dm_config_msg(struct netlink_message *amsg, struct netlink_message *msg, int err)
+{
+	if (err != 0) {
+		char *erm = strerror(-err);
+
+		printf("Failed config request, error: %s\n", erm);
+		state = STATE_FAILED;
+		return;
+	}
+
+	switch (state) {
+	case STATE_ALERT_MODE_SETTING:
+		printf("Alert mode successfully set\n");
+		state = STATE_IDLE;
+		break;
+	case STATE_TRUNC_LEN_SETTING:
+		printf("Truncation length successfully set\n");
+		state = STATE_IDLE;
+		break;
+	case STATE_QUEUE_LEN_SETTING:
+		printf("Queue length successfully set\n");
+		state = STATE_IDLE;
+		break;
+	default:
+		printf("Received acknowledgement for non-solicited config request\n");
+		state = STATE_FAILED;
+	}
 }
 
 void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err)
@@ -358,7 +669,7 @@ void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *m
 		state = STATE_FAILED;
 		goto out;
 	}
-	
+
 	if (state == STATE_ACTIVATING) {
 		struct sigaction act;
 		memset(&act, 0, sizeof(struct sigaction));
@@ -389,7 +700,6 @@ void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *ms
 		erm = strerror(err*-1);
 		printf("Stop request failed, error: %s\n", erm);
 	}
-
 }
 
 int enable_drop_monitor()
@@ -398,9 +708,19 @@ int enable_drop_monitor()
 
 	msg = alloc_netlink_msg(NET_DM_CMD_START, NLM_F_REQUEST|NLM_F_ACK, 0);
 
+	if (monitor_sw && nla_put_flag(msg->nlbuf, NET_DM_ATTR_SW_DROPS))
+		goto nla_put_failure;
+
+	if (monitor_hw && nla_put_flag(msg->nlbuf, NET_DM_ATTR_HW_DROPS))
+		goto nla_put_failure;
+
 	set_ack_cb(msg, handle_dm_start_msg);
-	
+
 	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
 }
 
 int disable_drop_monitor()
@@ -409,7 +729,111 @@ int disable_drop_monitor()
 
 	msg = alloc_netlink_msg(NET_DM_CMD_STOP, NLM_F_REQUEST|NLM_F_ACK, 0);
 
+	if (monitor_sw && nla_put_flag(msg->nlbuf, NET_DM_ATTR_SW_DROPS))
+		goto nla_put_failure;
+
+	if (monitor_hw && nla_put_flag(msg->nlbuf, NET_DM_ATTR_HW_DROPS))
+		goto nla_put_failure;
+
 	set_ack_cb(msg, handle_dm_stop_msg);
+
+	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
+}
+
+int set_alert_mode()
+{
+	enum net_dm_alert_mode alert_mode;
+	struct netlink_message *msg;
+
+	switch (state) {
+	case STATE_RQST_ALERT_MODE_SUMMARY:
+		alert_mode = NET_DM_ALERT_MODE_SUMMARY;
+		break;
+	case STATE_RQST_ALERT_MODE_PACKET:
+		alert_mode = NET_DM_ALERT_MODE_PACKET;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	msg = alloc_netlink_msg(NET_DM_CMD_CONFIG, NLM_F_REQUEST|NLM_F_ACK, 0);
+	if (!msg)
+		return -ENOMEM;
+
+	if (nla_put_u8(msg->nlbuf, NET_DM_ATTR_ALERT_MODE, alert_mode))
+		goto nla_put_failure;
+
+	set_ack_cb(msg, handle_dm_config_msg);
+
+	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
+}
+
+int set_trunc_len()
+{
+	struct netlink_message *msg;
+
+	msg = alloc_netlink_msg(NET_DM_CMD_CONFIG, NLM_F_REQUEST|NLM_F_ACK, 0);
+	if (!msg)
+		return -ENOMEM;
+
+	if (nla_put_u32(msg->nlbuf, NET_DM_ATTR_TRUNC_LEN, trunc_len))
+		goto nla_put_failure;
+
+	set_ack_cb(msg, handle_dm_config_msg);
+
+	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
+}
+
+int set_queue_len()
+{
+	struct netlink_message *msg;
+
+	msg = alloc_netlink_msg(NET_DM_CMD_CONFIG, NLM_F_REQUEST|NLM_F_ACK, 0);
+	if (!msg)
+		return -ENOMEM;
+
+	if (nla_put_u32(msg->nlbuf, NET_DM_ATTR_QUEUE_LEN, queue_len))
+		goto nla_put_failure;
+
+	set_ack_cb(msg, handle_dm_config_msg);
+
+	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
+}
+
+int get_config()
+{
+	struct netlink_message *msg;
+
+	msg = alloc_netlink_msg(NET_DM_CMD_CONFIG_GET, NLM_F_REQUEST, 0);
+	if (!msg)
+		return -ENOMEM;
+
+	return send_netlink_message(msg);
+}
+
+int get_stats()
+{
+	struct netlink_message *msg;
+
+	msg = alloc_netlink_msg(NET_DM_CMD_STATS_GET, NLM_F_REQUEST, 0);
+	if (!msg)
+		return -ENOMEM;
 
 	return send_netlink_message(msg);
 }
@@ -421,13 +845,23 @@ void display_help()
 	printf("help\t\t\t\t - Display this message\n");
 	printf("set:\n");
 	printf("\talertlimit <number>\t - caputre only this many alert packets\n");
+	printf("\talertmode <mode>\t - set mode to \"summary\" or \"packet\"\n");
+	printf("\ttrunc <len>\t\t - truncate packets to this length. ");
+	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
+	printf("\tqueue <len>\t\t - queue up to this many packets in the kernel. ");
+	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
+	printf("\tsw <true | false>\t - monitor software drops\n");
+	printf("\thw <true | false>\t - monitor hardware drops\n");
 	printf("start\t\t\t\t - start capture\n");
 	printf("stop\t\t\t\t - stop capture\n");
+	printf("show\t\t\t\t - show existing configuration\n");
+	printf("stats\t\t\t\t - show statistics\n");
 }
 
 void enter_command_line_mode()
 {
 	char *input;
+	int err;
 
 	do {
 		input = readline("dropwatch> ");
@@ -466,7 +900,54 @@ void enter_command_line_mode()
 				printf("setting alert capture limit to %lu\n",
 					alimit);
 				goto next_input;
+			} else if (!strncmp(ninput, "alertmode", 9)) {
+				ninput = ninput + 10;
+				if (!strncmp(ninput, "summary", 7)) {
+					state = STATE_RQST_ALERT_MODE_SUMMARY;
+					break;
+				} else if (!strncmp(ninput, "packet", 6)) {
+					state = STATE_RQST_ALERT_MODE_PACKET;
+					break;
+				}
+			} else if (!strncmp(ninput, "trunc", 5)) {
+				trunc_len = strtoul(ninput + 6, NULL, 10);
+				state = STATE_RQST_TRUNC_LEN;
+				break;
+			} else if (!strncmp(ninput, "queue", 5)) {
+				queue_len = strtoul(ninput + 6, NULL, 10);
+				state = STATE_RQST_QUEUE_LEN;
+				break;
+			} else if (!strncmp(ninput, "sw", 2)) {
+				err = strtobool(ninput + 3, &monitor_sw);
+				if (err) {
+					printf("invalid boolean value\n");
+					state = STATE_FAILED;
+					break;
+				}
+				printf("setting software drops monitoring to %d\n",
+				       monitor_sw);
+				goto next_input;
+			} else if (!strncmp(ninput, "hw", 2)) {
+				err = strtobool(ninput + 3, &monitor_hw);
+				if (err) {
+					printf("invalid boolean value\n");
+					state = STATE_FAILED;
+					break;
+				}
+				printf("setting hardware drops monitoring to %d\n",
+				       monitor_hw);
+				goto next_input;
 			}
+		}
+
+		if (!strncmp(input, "show", 4)) {
+			state = STATE_RQST_CONFIG;
+			break;
+		}
+
+		if (!strncmp(input, "stats", 5)) {
+			state = STATE_RQST_STATS;
+			break;
 		}
 next_input:
 		free(input);
@@ -477,7 +958,6 @@ next_input:
 
 void enter_state_loop(void)
 {
-
 	int should_rx = 0;
 
 	while (1) {
@@ -496,9 +976,7 @@ void enter_state_loop(void)
 				state = STATE_ACTIVATING;
 				should_rx = 1;
 			}
-			
 			break;
-
 		case STATE_ACTIVATING:
 			printf("Waiting for activation ack....\n");
 			break;
@@ -516,11 +994,77 @@ void enter_state_loop(void)
 		case STATE_DEACTIVATING:
 			printf("Waiting for deactivation ack...\n");
 			break;
-
 		case STATE_EXIT:
 		case STATE_FAILED:
 			should_rx = 0;
 			return;
+		case STATE_RQST_ALERT_MODE_SUMMARY:
+		case STATE_RQST_ALERT_MODE_PACKET:
+			printf("Setting alert mode\n");
+			if (set_alert_mode() < 0) {
+				perror("Failed to set alert mode");
+				state = STATE_FAILED;
+			} else {
+				state = STATE_ALERT_MODE_SETTING;
+				should_rx = 1;
+			}
+			break;
+		case STATE_ALERT_MODE_SETTING:
+			printf("Waiting for alert mode setting ack...\n");
+			break;
+		case STATE_RQST_TRUNC_LEN:
+			printf("Setting truncation length to %lu\n",
+			       trunc_len);
+			if (set_trunc_len() < 0) {
+				perror("Failed to set truncation length");
+				state = STATE_FAILED;
+			} else {
+				state = STATE_TRUNC_LEN_SETTING;
+				should_rx = 1;
+			}
+			break;
+		case STATE_TRUNC_LEN_SETTING:
+			printf("Waiting for truncation length setting ack...\n");
+			break;
+		case STATE_RQST_QUEUE_LEN:
+			printf("Setting queue length to %lu\n", queue_len);
+			if (set_queue_len() < 0) {
+				perror("Failed to set queue length");
+				state = STATE_FAILED;
+			} else {
+				state = STATE_QUEUE_LEN_SETTING;
+				should_rx = 1;
+			}
+			break;
+		case STATE_QUEUE_LEN_SETTING:
+			printf("Waiting for queue length setting ack...\n");
+			break;
+		case STATE_RQST_CONFIG:
+			printf("Getting existing configuration\n");
+			if (get_config() < 0) {
+				perror("Failed to get existing configuration");
+				state = STATE_FAILED;
+			} else {
+				state = STATE_CONFIG_GETTING;
+				should_rx = 1;
+			}
+			break;
+		case STATE_CONFIG_GETTING:
+			printf("Waiting for existing configuration query response\n");
+			break;
+		case STATE_RQST_STATS:
+			printf("Getting statistics\n");
+			if (get_stats() < 0) {
+				perror("Failed to get statistics");
+				state = STATE_FAILED;
+			} else {
+				state = STATE_STATS_GETTING;
+				should_rx = 1;
+			}
+			break;
+		case STATE_STATS_GETTING:
+			printf("Waiting for statistics query response\n");
+			break;
 		default:
 			printf("Unknown state received!  exiting!\n");
 			state = STATE_FAILED;

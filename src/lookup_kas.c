@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2009, Neil Horman <nhorman@redhat.com>
- * 
+ *
  * This program file is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
  * Free Software Foundation; version 2 of the License.
@@ -47,8 +47,8 @@ LIST_HEAD(sym_list, symbol_entry);
 
 /*
  * This is our cache of symbols that we've previously looked up
- */ 
-static struct sym_list sym_list_head = {NULL}; 
+ */
+static struct sym_list sym_list_head = {NULL};
 
 
 static int lookup_kas_cache( __u64 pc, struct loc_result *location)
@@ -99,7 +99,7 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 	uipc = pc;
 	ulpc = 0;
 	while (!feof(pf)) {
-		/* 
+		/*
 		 * Each line of /proc/kallsyms is formatteded as:
 		 *  - "%pK %c %s\n" (for kernel internal symbols), or
 		 *  - "%pK %c %s\t[%s]\n" (for module-provided symbols)
@@ -122,7 +122,7 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 			fclose(pf);
 			free(name);
 			return lookup_kas_cache(pc, location);
-		} 
+		}
 
 		/*
  		 * Advance all our state holders
@@ -139,10 +139,9 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 static int lookup_kas_init(void)
 {
 	printf("Initalizing kallsyms db\n");
-	
+
 	return 0;
 }
-
 
 static int lookup_kas_sym(void *pc, struct loc_result *location)
 {
@@ -160,4 +159,3 @@ struct lookup_methods kallsym_methods = {
 	lookup_kas_init,
 	lookup_kas_sym,
 };
-

@@ -39,3 +39,42 @@ Displays summary of all commands.
 \fBset alertlimit\fP \fIvalue\fP
 Sets a triggerpoint to stop monitoring for dropped packets after \fIvalue\fP alerts
 have been received.
+.TP
+.BR "set alertmode " "{ " summary " | " packet " }"
+.I summary
+- Default mode. A summary of recent packet drops is sent to user space. The
+alert includes drop locations and number of drops in each location.
+
+.I packet
+- Each dropped packet is sent to user space. The alert includes the packet
+itself and various metadata such as drop location and timestamp.
+.TP
+.BI "set trunc " "len"
+Sets the truncation length. Reported packets will be truncated to length
+\fIlen\fP. This setting is only applicable when \fIalertmode\fP is set to
+\fIpacket\fP. By default packets are not truncated. A value of \fI0\fP disables
+truncation.
+.TP
+.BI "set queue " "len"
+Sets the queue length in the kernel. When \fIalertmode\fP is set to
+\fIpacket\fP, the kernel queues dropped packets in a per-CPU drop list before
+preparing a netlink message for each. This setting controls the queue's length.
+By default this is limited by the kernel to 1,000 packets. Increasing this
+value will increase the memory utilization of the system.
+.TP
+.BR "set sw " "{ " true " | " false " }"
+Enables or disables the monitoring of software originated drops. By default
+software originated drops are monitored.
+.TP
+.BR "set hw " "{ " true " | " false " }"
+Enables or disables the monitoring of hardware originated drops. By default
+hardware originated drops are not monitored.
+.TP
+.B show
+Query existing configuration from the kernel and show it.
+.TP
+.B stats
+Query statistics from the kernel and show it.
+
+.I "Tail dropped"
+- Number of packets that could not be enqueued to the per-CPU drop list(s).

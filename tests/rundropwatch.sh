@@ -17,6 +17,3 @@ then
 		exit 77
 	fi
 fi
-
-
-
