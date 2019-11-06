@@ -20,7 +20,7 @@
 /*
  * This is a translator.  given an input address, this will convert it into a
  * function and offset.  Unless overridden, it will automatically determine
- * tranlations using the following methods, in order of priority:
+ * translations using the following methods, in order of priority:
  * 1) /usr/lib/debug/<kernel version> using libbfd
  * 2) /proc/kallsyms
  */
@@ -32,7 +32,7 @@
 
 
 /*
- * Initalization routine
+ * Initialization routine
  * INPUTS:
  *   method - enum describing how to do translation
  *          * METHOD_NULL : Just print pc values, not symbols
@@ -40,8 +40,8 @@
  *          * METHOD_DEBUGINFO : use debuginfo package
  *          * METHOD_KALLSYMS : use /proc/kallsyms
  *   returns:
- *          * 0   : initalization succeded
- *          * < 0 : initalization failed
+ *          * 0   : initialization succeeded
+ *          * < 0 : initialization failed
  */
 typedef enum {
 	METHOD_NULL = 0,

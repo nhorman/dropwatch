@@ -20,7 +20,7 @@
 /*
  * This is a translator.  given an input address, this will convert it into a
  * function and offset.  Unless overridden, it will automatically determine
- * tranlations using the following methods, in order of priority:
+ * translations using the following methods, in order of priority:
  * 1) /usr/lib/debug/<kernel version> using libbfd
  * 2) /proc/kallsyms
  */
@@ -47,7 +47,7 @@ extern struct lookup_methods kallsym_methods;
 
 static int lookup_null_init(void)
 {
-	printf("Initalizing null lookup method\n");
+	printf("Initializing null lookup method\n");
 	return 0;
 }
 
@@ -72,7 +72,7 @@ int init_lookup(lookup_init_method_t method)
 	switch (method) {
 	case METHOD_NULL:
 		/*
- 		 * Don't actuall do any lookups,
+ 		 * Don't actually do any lookups,
  		 * just pretend everything is
  		 * not found
  		 */
