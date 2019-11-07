@@ -138,7 +138,7 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 
 static int lookup_kas_init(void)
 {
-	printf("Initalizing kallsyms db\n");
+	printf("Initializing kallsyms db\n");
 
 	return 0;
 }

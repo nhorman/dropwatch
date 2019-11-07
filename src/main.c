@@ -44,7 +44,7 @@
 #include "lookup.h"
 
 /*
- * This is just in place until the kernel changes get comitted
+ * This is just in place until the kernel changes get committed 
  */
 #ifndef NETLINK_DRPMON
 #define NETLINK_DRPMON 20
@@ -295,7 +295,7 @@ struct netlink_message *recv_netlink_message(int *err)
 			switch (errno) {
 			case EINTR:
 				/*
-				 * Take a pass throught the state loop
+				 * Take a pass through the state loop
 				 */
 				return NULL;
 				break;
@@ -844,7 +844,7 @@ void display_help()
 	printf("exit\t\t\t\t - Quit dropwatch\n");
 	printf("help\t\t\t\t - Display this message\n");
 	printf("set:\n");
-	printf("\talertlimit <number>\t - caputre only this many alert packets\n");
+	printf("\talertlimit <number>\t - capture only this many alert packets\n");
 	printf("\talertmode <mode>\t - set mode to \"summary\" or \"packet\"\n");
 	printf("\ttrunc <len>\t\t - truncate packets to this length. ");
 	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
@@ -1143,7 +1143,7 @@ int main (int argc, char **argv)
 
 
 	/*
- 	 * Initalize our lookup library
+ 	 * Initialize our lookup library
  	 */
 	init_lookup(meth);
 
