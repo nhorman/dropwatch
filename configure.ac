@@ -16,6 +16,7 @@ AC_CHECK_FUNCS(getopt_long)
 PKG_CHECK_MODULES([LIBNL3], [libnl-3.0], [], [AC_MSG_ERROR([libnl-3.0 is required])])
 # Fallback on using -lreadline as readline.pc is only available since version 8.0
 PKG_CHECK_MODULES([READLINE], [readline], [], [READLINE_LIBS=-lreadline])
+PKG_CHECK_MODULES([LIBPCAP], [libpcap])
 
 AC_ARG_WITH([bfd],
 	[AS_HELP_STRING([--without-bfd], [Build without bfd library (default: yes)])],
