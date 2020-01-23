@@ -501,6 +501,17 @@ void handle_dm_packet_alert_msg(struct netlink_message *msg, int err)
 	if (attrs[NET_DM_ATTR_IN_PORT])
 		print_nested_port(attrs[NET_DM_ATTR_IN_PORT], "input");
 
+	if (attrs[NET_DM_ATTR_FLOW_ACTION_COOKIE]) {
+		unsigned char *cookie = nla_data(attrs[NET_DM_ATTR_FLOW_ACTION_COOKIE]);
+		int cookie_len = nla_len(attrs[NET_DM_ATTR_FLOW_ACTION_COOKIE]);
+		int i;
+
+		printf("cookie: ");
+		for (i = 0; i < cookie_len; i++)
+			printf("%02x", cookie[i]);
+		printf("\n");
+	}
+
 	if (attrs[NET_DM_ATTR_TIMESTAMP]) {
 		time_t tv_sec;
 		struct tm *tm;
