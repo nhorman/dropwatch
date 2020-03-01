@@ -11,6 +11,7 @@ addons:
       libreadline-dev
       libnl-3-dev
       libnl-genl-3-dev
+      libpcap-dev
 
 script: ./autogen.sh && ./configure && make && make check 
 
