@@ -1,0 +1,83 @@
+.TH dwdump 1 "Jan 2020" "Ido Schimmel"
+.SH NAME
+dwdump \- dump kernel dropped packets to a file
+.SH SYNOPSIS
+.sp
+.ad l
+.in +8
+.ti -8
+.B dwdump
+.RI "[ " OPTIONS " ]"
+.sp
+
+.SH OPTIONS
+
+.TP
+.BR "\-w" , " --write " \fIFILE
+Dump packets to provided file in pcap format. Defaults to standard output.
+
+.TP
+.BR "\-t", " --trunc " \fILENGTH
+Ask the kernel to truncate packets to provided length. Defaults to no
+truncation.
+
+.TP
+.BR "-q", " --query"
+Query the kernel for current configuration and exit.
+
+.TP
+.BR "-l", " --limit " \fILIMIT
+Ask the kernel to set the per-CPU packet queue limit to provided limit.
+Defaults to 1,000 packets.
+
+.TP
+.BR "-p", " --passive"
+Only listen on notified packets with no configuration. This is useful if the
+kernel is already monitoring dropped packets and you only want to open another
+listening socket.
+
+.TP
+.BR "-s", " --stats"
+Query the kernel for statistics and exit.
+
+.TP
+.BR "-b", " --bufsize " \fISIZE
+Set the socket's receive buffer to provided size. Defaults to 1MB.
+
+.TP
+.BR "-o", " --origin " "{ " sw " | " hw " }"
+Ask the kernel to only monitor software or hardware originated drops. Defaults
+to both. See \fBdevlink-trap\fR(8) for details on how to get hardware
+originated drops to the kernel.
+
+.TP
+.BR "-e", " --exit"
+Ask the kernel to stop monitoring and exit.
+
+.SH "EXAMPLES"
+.PP
+dwdump -w drops.pcap
+.RS 4
+Dump dropped packets to a file.
+.RE
+.PP
+dwdump | tshark -V -r -
+.RS 4
+Pipe dropped packets to Wireshark.
+.RE
+.PP
+dwdump -o sw -w drops.pcap
+.RS 4
+Only monitor software originated drops.
+.RE
+.PP
+dwdump -q
+.RS 4
+Query current configuration from the kernel and exit.
+.RE
+
+.SH SEE ALSO
+.BR dropwatch (1),
+.BR devlink-trap (8),
+.BR tshark (1),
+.br
