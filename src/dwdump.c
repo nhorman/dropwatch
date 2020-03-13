@@ -24,7 +24,7 @@
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
-static const struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
+static struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
 	[NET_DM_ATTR_ALERT_MODE]		= { .type = NLA_U8 },
 	[NET_DM_ATTR_TRUNC_LEN]			= { .type = NLA_U32 },
 	[NET_DM_ATTR_QUEUE_LEN]			= { .type = NLA_U32 },
@@ -32,7 +32,7 @@ static const struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
 	[NET_DM_ATTR_HW_STATS]			= { .type = NLA_NESTED },
 };
 
-static const struct nla_policy
+static struct nla_policy
 net_dm_stats_policy[NET_DM_ATTR_STATS_MAX + 1] = {
 	[NET_DM_ATTR_STATS_DROPPED]		= { .type = NLA_U64 },
 };
