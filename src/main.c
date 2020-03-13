@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -486,9 +487,9 @@ void handle_dm_packet_alert_msg(struct netlink_message *msg, int err)
 		goto out_free;
 
 	if (attrs[NET_DM_ATTR_PC] && attrs[NET_DM_ATTR_SYMBOL])
-		printf("drop at: %s (%p)\n",
+		printf("drop at: %s (0x%" PRIx64 ")\n",
 		       nla_get_string(attrs[NET_DM_ATTR_SYMBOL]),
-		       (void *) nla_get_u64(attrs[NET_DM_ATTR_PC]));
+		       nla_get_u64(attrs[NET_DM_ATTR_PC]));
 	else if (attrs[NET_DM_ATTR_HW_TRAP_GROUP_NAME] &&
 		 attrs[NET_DM_ATTR_HW_TRAP_NAME])
 		printf("drop at: %s (%s)\n",
@@ -524,7 +525,7 @@ void handle_dm_packet_alert_msg(struct netlink_message *msg, int err)
 
 		tstr = asctime(tm);
 		tstr[strlen(tstr) - 1] = 0;
-		printf("timestamp: %s %09ld nsec\n", tstr, ts % 1000000000);
+		printf("timestamp: %s %09" PRId64 " nsec\n", tstr, ts % 1000000000);
 	}
 
 	if (attrs[NET_DM_ATTR_PROTO])
@@ -599,7 +600,7 @@ void print_nested_stats(struct nlattr *attr)
 		return;
 
 	if (attrs[NET_DM_ATTR_STATS_DROPPED])
-		printf("Tail dropped: %lu\n",
+		printf("Tail dropped: %" PRIu64 "\n",
 		       nla_get_u64(attrs[NET_DM_ATTR_STATS_DROPPED]));
 }
 
