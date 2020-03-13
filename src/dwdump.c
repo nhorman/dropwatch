@@ -3,6 +3,7 @@
  */
 
 #include <errno.h>
+#include <inttypes.h>
 #include <getopt.h>
 #include <pcap.h>
 #include <signal.h>
@@ -246,7 +247,7 @@ static void dwdump_nested_stats_print(struct nlattr *attr)
 		return;
 
 	if (attrs[NET_DM_ATTR_STATS_DROPPED])
-		printf("Tail dropped: %lu\n",
+		printf("Tail dropped: %" PRIu64 "\n",
 		       nla_get_u64(attrs[NET_DM_ATTR_STATS_DROPPED]));
 }
 
