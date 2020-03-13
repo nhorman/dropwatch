@@ -517,7 +517,7 @@ static int dwdump_pcap_init(struct dwdump *dwdump)
 	dwdump->pcap_dumper = pcap_dump_open(dwdump->pcap_handle,
 					     dwdump->options.dumpfile);
 	if (!dwdump->pcap_dumper) {
-		pcap_perror(dwdump->pcap_handle, dwdump->options.dumpfile);
+		pcap_perror(dwdump->pcap_handle, "pcap_dump_open");
 		goto err_dump_open;
 	}
 
