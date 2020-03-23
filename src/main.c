@@ -267,7 +267,7 @@ int send_netlink_message(struct netlink_message *msg)
 
 struct netlink_message *recv_netlink_message(int *err)
 {
-	static unsigned char *buf;
+	static struct nlmsghdr *buf;
 	struct netlink_message *msg;
 	struct genlmsghdr *glm;
 	struct sockaddr_nl nla;
@@ -277,7 +277,7 @@ struct netlink_message *recv_netlink_message(int *err)
 	*err = 0;
 
 	do {
-		rc = nl_recv(nsd, &nla, &buf, NULL);
+		rc = nl_recv(nsd, &nla, (unsigned char **)&buf, NULL);
 		if (rc < 0) {
 			switch (errno) {
 			case EINTR:
@@ -294,7 +294,7 @@ struct netlink_message *recv_netlink_message(int *err)
 		}
 	} while (rc == 0);
 
-	msg = wrap_netlink_msg((struct nlmsghdr *)buf);
+	msg = wrap_netlink_msg(buf);
 
 	type = ((struct nlmsghdr *)msg->msg)->nlmsg_type;
 
