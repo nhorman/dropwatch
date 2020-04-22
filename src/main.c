@@ -91,6 +91,7 @@ enum {
 	STATE_DEACTIVATING,
 	STATE_FAILED,
 	STATE_EXIT,
+	STATE_INTERFACE,
 	STATE_RQST_ALERT_MODE_SUMMARY,
 	STATE_RQST_ALERT_MODE_PACKET,
 	STATE_ALERT_MODE_SETTING,
@@ -886,6 +887,11 @@ void enter_command_line_mode()
 			break;
 		}
 
+		if (!strcmp(input, "init interface")) {
+			state = STATE_INTERFACE;
+			break;
+		}
+
 		if (!strcmp (input, "help")) {
 			display_help();
 			goto next_input;
@@ -996,6 +1002,9 @@ void enter_state_loop(void)
 		case STATE_FAILED:
 			should_rx = 0;
 			return;
+		case STATE_INTERFACE:
+			printf("Initializing interface...\n");
+			break;
 		case STATE_RQST_ALERT_MODE_SUMMARY:
 		case STATE_RQST_ALERT_MODE_PACKET:
 			printf("Setting alert mode\n");
