@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "socket.h": "c",
+        "errno.h": "c"
+    },
+   // "C_Cpp.errorSquiggles": "Disabled"
+}
