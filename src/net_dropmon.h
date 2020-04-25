@@ -53,6 +53,8 @@ enum {
 	NET_DM_CMD_STATS_GET,
 	NET_DM_CMD_STATS_NEW,
 	_NET_DM_CMD_MAX,
+	NET_DM_CMD_START_IFC,
+	NET_DM_CMD_STOP_IFC,
 };
 
 #define NET_DM_CMD_MAX (_NET_DM_CMD_MAX - 1)
@@ -87,6 +89,8 @@ enum net_dm_attr {
 	NET_DM_ATTR_SW_DROPS,			/* flag */
 	NET_DM_ATTR_HW_DROPS,			/* flag */
 	NET_DM_ATTR_FLOW_ACTION_COOKIE,		/* binary */
+	NET_DM_IFC_ATTR_SW_DROPS,			/* flag */
+	NET_DM_IFC_ATTR_HW_DROPS,			/* flag */
 
 	__NET_DM_ATTR_MAX,
 	NET_DM_ATTR_MAX = __NET_DM_ATTR_MAX - 1

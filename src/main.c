@@ -56,6 +56,8 @@ unsigned long trunc_len = 0;
 unsigned long queue_len = 0;
 bool monitor_sw = false;
 bool monitor_hw = false;
+bool interface_sw = false;
+bool interface_hw = false;
 
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_packet_alert_msg(struct netlink_message *msg, int err);
@@ -64,6 +66,9 @@ void handle_dm_stats_new_msg(struct netlink_message *msg, int err);
 void handle_dm_config_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 void handle_dm_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
 void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
+void handle_dm_ifc_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
+void handle_dm_ifc_stop_msg(struct netlink_message *amsg, struct netlink_message *msg, int err);
+int disable_interface();
 int disable_drop_monitor();
 
 static void(*type_cb[_NET_DM_CMD_MAX])(struct netlink_message *, int err) = {
@@ -91,7 +96,13 @@ enum {
 	STATE_DEACTIVATING,
 	STATE_FAILED,
 	STATE_EXIT,
-	STATE_INTERFACE,
+	STATE_ACTIVATING_INTERFACE,
+	STATE_RECEIVING_INTERFACE,
+	STATE_RQST_ACTIVATE_INTERFACE,
+	STATE_RQST_DEACTIVATE_INTERFACE,
+	STATE_DEACTIVATING_INTERFACE,
+	STATE_FAILED_INTERFACE,
+	STATE_EXIT_INTERFACE,
 	STATE_RQST_ALERT_MODE_SUMMARY,
 	STATE_RQST_ALERT_MODE_PACKET,
 	STATE_ALERT_MODE_SETTING,
@@ -701,6 +712,91 @@ void handle_dm_stop_msg(struct netlink_message *amsg, struct netlink_message *ms
 	}
 }
 
+void handle_dm_ifc_start_msg(struct netlink_message *amsg, struct netlink_message *msg, int err)
+{
+	if (err != 0) {
+		char *erm = strerror(err*-1);
+		printf("Failed activation request, error: %s\n", erm);
+		state = STATE_FAILED_INTERFACE;
+		goto out;
+	}
+
+	if (state == STATE_ACTIVATING_INTERFACE) {
+		struct sigaction act;
+		memset(&act, 0, sizeof(struct sigaction));
+		act.sa_handler = sigint_handler;
+		act.sa_flags = SA_RESETHAND;
+
+		printf("Interface activated.\n");
+		printf("Issue Ctrl-C to stop interface\n");
+		sigaction(SIGINT, &act, NULL);
+
+		state = STATE_RECEIVING_INTERFACE;
+	} else {
+		printf("Odd, the kernel told us that it activated and we didn't ask\n");
+		state = STATE_FAILED_INTERFACE;
+	}
+out:
+	return;
+	
+}
+
+void handle_dm_ifc_stop_msg(struct netlink_message *amsg, struct netlink_message *msg, int err)
+{
+		char *erm;
+
+	if ((err == 0) || (err == -EAGAIN)) {
+		printf("Got a stop message\n");
+		state = STATE_IDLE;
+	} else {
+		erm = strerror(err*-1);
+		printf("Stop request failed, error: %s\n", erm);
+	}
+}
+
+int enable_interface()
+{
+	struct netlink_message *msg;
+
+	msg = alloc_netlink_msg(NET_DM_CMD_START_IFC, NLM_F_REQUEST|NLM_F_ACK, 0);
+
+	if (interface_sw && nla_put_flag(msg->nlbuf, NET_DM_IFC_ATTR_SW_DROPS))
+		goto nla_put_failure;
+
+	if (interface_hw && nla_put_flag(msg->nlbuf, NET_DM_IFC_ATTR_HW_DROPS))
+		goto nla_put_failure;
+
+	set_ack_cb(msg, handle_dm_ifc_start_msg);
+
+	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
+}
+
+int disable_interface()
+{
+	struct netlink_message *msg;
+
+	msg = alloc_netlink_msg(NET_DM_CMD_STOP_IFC, NLM_F_REQUEST|NLM_F_ACK, 0);
+
+	if (interface_sw && nla_put_flag(msg->nlbuf, NET_DM_IFC_ATTR_SW_DROPS))
+		goto nla_put_failure;
+
+	if (interface_hw && nla_put_flag(msg->nlbuf, NET_DM_IFC_ATTR_HW_DROPS))
+		goto nla_put_failure;
+
+	set_ack_cb(msg, handle_dm_ifc_stop_msg);
+
+	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
+
+}
+
 int enable_drop_monitor()
 {
 	struct netlink_message *msg;
@@ -841,6 +937,7 @@ void display_help()
 {
 	printf("Command Syntax:\n");
 	printf("exit\t\t\t\t - Quit dropwatch\n");
+	printf("exit interface\t\t\t\t - Quit network interface\n");
 	printf("help\t\t\t\t - Display this message\n");
 	printf("set:\n");
 	printf("\talertlimit <number>\t - capture only this many alert packets\n");
@@ -852,7 +949,9 @@ void display_help()
 	printf("\tsw <true | false>\t - monitor software drops\n");
 	printf("\thw <true | false>\t - monitor hardware drops\n");
 	printf("start\t\t\t\t - start capture\n");
+	printf("start interface\t\t\t\t - start network interface\n");
 	printf("stop\t\t\t\t - stop capture\n");
+	printf("stop interface\t\t\t\t - stop network interface\n");
 	printf("show\t\t\t\t - show existing configuration\n");
 	printf("stats\t\t\t\t - show statistics\n");
 }
@@ -887,8 +986,18 @@ void enter_command_line_mode()
 			break;
 		}
 
-		if (!strcmp(input, "init interface")) {
-			state = STATE_INTERFACE;
+		if (!strcmp(input, "start interface")) {
+			state = STATE_RQST_ACTIVATE_INTERFACE;
+			break;
+		}
+
+		if (!strcmp(input, "stop interface")) {
+			state = STATE_RQST_DEACTIVATE_INTERFACE;
+			break;
+		}
+
+		if (!strcmp(input, "exit interface")) {
+			state = STATE_EXIT_INTERFACE;
 			break;
 		}
 
@@ -1002,9 +1111,37 @@ void enter_state_loop(void)
 		case STATE_FAILED:
 			should_rx = 0;
 			return;
-		case STATE_INTERFACE:
+		case STATE_RQST_ACTIVATE_INTERFACE:
 			printf("Initializing interface...\n");
+			if (enable_interface() < 0) {
+				perror("Unable to send activation msg:");
+				state = STATE_FAILED_INTERFACE;
+			} else {
+				state = STATE_ACTIVATING_INTERFACE;
+				should_rx = 1;
+			}
 			break;
+		case STATE_ACTIVATING_INTERFACE:
+			printf("Waiting for activation ifc....\n");
+			break;
+		case STATE_RECEIVING_INTERFACE:
+			break;
+		case STATE_RQST_DEACTIVATE_INTERFACE:
+			printf("Deactivation requested, turning off interface...\n");
+			if (disable_interface() < 0) {
+				perror("Unable to send deactivation msg:");
+				state = STATE_FAILED_INTERFACE;
+			} else
+				state = STATE_DEACTIVATING_INTERFACE;
+			should_rx = 1;
+			break;
+		case STATE_DEACTIVATING_INTERFACE:
+			printf("Waiting for deactivation ifc...\n");
+			break;
+		case STATE_EXIT_INTERFACE:
+		case STATE_FAILED_INTERFACE:
+			should_rx = 0;
+			return;
 		case STATE_RQST_ALERT_MODE_SUMMARY:
 		case STATE_RQST_ALERT_MODE_PACKET:
 			printf("Setting alert mode\n");
