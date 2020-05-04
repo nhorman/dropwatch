@@ -58,6 +58,7 @@ bool monitor_sw = false;
 bool monitor_hw = false;
 bool interface_sw = false;
 bool interface_hw = false;
+char *ifname = NULL;
 
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_packet_alert_msg(struct netlink_message *msg, int err);
@@ -758,13 +759,14 @@ int enable_interface()
 {
 	struct netlink_message *msg;
 
+	if (ifname == NULL) {
+		printf("No interface name specified\n");
+		return -EINVAL;
+	}
+
 	msg = alloc_netlink_msg(NET_DM_CMD_START_IFC, NLM_F_REQUEST|NLM_F_ACK, 0);
-
-	if (interface_sw && nla_put_flag(msg->nlbuf, NET_DM_IFC_ATTR_SW_DROPS))
-		goto nla_put_failure;
-
-	if (interface_hw && nla_put_flag(msg->nlbuf, NET_DM_IFC_ATTR_HW_DROPS))
-		goto nla_put_failure;
+	if (nla_put_string(msg->nlbuf, NET_DM_ATTR_IFNAME, ifname))
+                goto nla_put_failure;
 
 	set_ack_cb(msg, handle_dm_ifc_start_msg);
 
@@ -781,19 +783,10 @@ int disable_interface()
 
 	msg = alloc_netlink_msg(NET_DM_CMD_STOP_IFC, NLM_F_REQUEST|NLM_F_ACK, 0);
 
-	if (interface_sw && nla_put_flag(msg->nlbuf, NET_DM_IFC_ATTR_SW_DROPS))
-		goto nla_put_failure;
-
-	if (interface_hw && nla_put_flag(msg->nlbuf, NET_DM_IFC_ATTR_HW_DROPS))
-		goto nla_put_failure;
-
 	set_ack_cb(msg, handle_dm_ifc_stop_msg);
 
 	return send_netlink_message(msg);
 
-nla_put_failure:
-	free_netlink_msg(msg);
-	return -EMSGSIZE;
 
 }
 
@@ -949,7 +942,7 @@ void display_help()
 	printf("\tsw <true | false>\t - monitor software drops\n");
 	printf("\thw <true | false>\t - monitor hardware drops\n");
 	printf("start\t\t\t\t - start capture\n");
-	printf("start interface\t\t\t\t - start network interface\n");
+	printf("start interface <ifcname> \t\t\t\t - start network interface\n");
 	printf("stop\t\t\t\t - stop capture\n");
 	printf("stop interface\t\t\t\t - stop network interface\n");
 	printf("show\t\t\t\t - show existing configuration\n");
@@ -986,7 +979,14 @@ void enter_command_line_mode()
 			break;
 		}
 
-		if (!strcmp(input, "start interface")) {
+		if (!strncmp(input, "start interface", strlen("start interface"))) {
+			/* move string pointer to input value */
+			char *inputptr = input + strlen("start interface") + 2;
+			if (ifname != NULL) {
+				free(ifname);
+				ifname = NULL;
+			}
+			ifname = strdup(inputptr);
 			state = STATE_RQST_ACTIVATE_INTERFACE;
 			break;
 		}
