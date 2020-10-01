@@ -1,6 +1,8 @@
 language: c
 dist: xenial 
-
+arch:
+  - amd64
+  - ppc64le
 compiler:
   - clang
   - gcc
