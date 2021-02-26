@@ -9,7 +9,7 @@
  */
 
 #include "config.h"
-
+#include <errno.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -90,7 +90,8 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 		 *  - "%pK %c %s\n" (for kernel internal symbols), or
 		 *  - "%pK %c %s\t[%s]\n" (for module-provided symbols)
 		 */
-		if (fscanf(pf, "%llx %*s %ms [ %*[^]] ]", (unsigned long long *)&ppc, &name) < 0) {
+		errno = 0;
+		if (fscanf(pf, "%llx %*s %ms [ %*[^]] ]", (unsigned long long *)&ppc, &name) < 0 && errno) {
 			perror("Error Scanning File: ");
 			break;
 		}
