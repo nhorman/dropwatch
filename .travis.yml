@@ -1,6 +1,7 @@
 language: c
 dist: focal 
 arch:
+  - arm64
   - amd64
   - ppc64le
 compiler:
