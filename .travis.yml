@@ -1,5 +1,5 @@
 language: c
-dist: xenial 
+dist: focal 
 arch:
   - amd64
   - ppc64le
