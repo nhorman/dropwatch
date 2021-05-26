@@ -15,11 +15,14 @@
 #include <arpa/inet.h>
 #include <linux/if_arp.h>
 #include <linux/if_packet.h>
+#include <linux/netlink.h>
 #include <linux/socket.h>
 #include <netlink/genl/ctrl.h>
 #include <netlink/genl/genl.h>
 #include <netlink/socket.h>
+#include <sys/socket.h>
 #include <sys/time.h>
+#include <sys/types.h>
 
 #include "net_dropmon.h"
 
@@ -81,8 +84,8 @@ struct linux_sll {
 
 static int dwdump_data_init(struct dwdump *dwdump)
 {
+	int fd, optval, family, err;
 	struct nl_sock *sk;
-	int family, err;
 
 	sk = nl_socket_alloc();
 	if (!sk) {
@@ -118,6 +121,15 @@ static int dwdump_data_init(struct dwdump *dwdump)
 		goto err_set_buffer_size;
 	}
 
+	optval = 1;
+	fd = nl_socket_get_fd(sk);
+	err = setsockopt(fd, SOL_NETLINK, NETLINK_NO_ENOBUFS, &optval,
+			 sizeof(optval));
+	if (err < 0) {
+		fprintf(stderr, "Failed to set NETLINK_NO_ENOBUFS socket option\n");
+		goto err_setsockopt;
+	}
+
 	err = nl_socket_add_memberships(sk, NET_DM_GRP_ALERT, NFNLGRP_NONE);
 	if (err) {
 		fprintf(stderr, "Failed to join multicast group\n");
@@ -130,6 +142,7 @@ static int dwdump_data_init(struct dwdump *dwdump)
 	return 0;
 
 err_add_memberships:
+err_setsockopt:
 err_set_buffer_size:
 err_genl_ctrl_resolve:
 err_genl_connect:
@@ -611,8 +624,7 @@ static int dwdump_main(struct dwdump *dwdump)
 		len = recv(fd, dwdump->pkt, dwdump->snaplen, 0);
 		if (len < 0) {
 			switch (errno) {
-			case EINTR: /* fall-through */
-			case ENOBUFS:
+			case EINTR:
 				continue;
 			default:
 				perror("recv");
