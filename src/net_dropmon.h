@@ -6,6 +6,10 @@
 
 #include <linux/netlink.h>
 
+#ifndef SOL_NETLINK
+#define SOL_NETLINK     270
+#endif
+
 struct net_dm_drop_point {
 	__u8 pc[8];
 	__u32 count;
