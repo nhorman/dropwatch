@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0-or-later
+
 AC_INIT(dropwatch,1.5.3)
 AC_PREREQ(2.12)dnl
 AC_CONFIG_HEADERS(config.h)

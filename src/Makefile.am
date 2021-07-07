@@ -1,4 +1,5 @@
-
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
 bin_PROGRAMS = dropwatch dwdump
 
 AM_CFLAGS = -g -Wall -Werror $(LIBNL3_CFLAGS) $(LIBNLG3_CFLAGS) $(READLINE_CFLAGS)
