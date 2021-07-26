@@ -8,13 +8,13 @@ Thanks for Downloading Dropwatch!
 What is Dropwatch?
 ------------------
 Dropwatch is a project I started in an effort to improve the ability for
-developers and system administrator to diagnose problems in the Linux Networking
+developers and system administrators to diagnose problems in the Linux Networking
 stack, specifically in our ability to diagnose where packets are getting
 dropped.  From my probing, I've come to the conclusion that there are four main
 shortcomings in our current environment:
 
 1) _Consolidation, or lack thereof._  Currently, if you would like to check on the
-status of dropped packets in the kernel, you need to check at least 3 places,
+status of dropped packets in the kernel, you need to check at least 4 places,
 and possibly more: The /proc/net/snmp file, the netstat utility, the tc utility,
 and ethtool.  This project aims to consolidate several of those checks into one
 tool, making it easier for a sysadmin or developer to detect lost packets
@@ -49,6 +49,6 @@ make install
 
 Questions
 ---------
-Feel free to email me directly at nhorman@redhat.com with question, or if you
-find a bug, open a trac ticket here on the github page
+Feel free to email me directly at nhorman@tuxdriver.com with question, or if you
+find a bug, open an issue here on the github page
 
