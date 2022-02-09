@@ -26,6 +26,7 @@
 #include <netlink/netlink.h>
 #include <netlink/genl/genl.h>
 #include <netlink/genl/ctrl.h>
+#include <net/if.h>
 
 #include "net_dropmon.h"
 #include "lookup.h"
@@ -56,6 +57,8 @@ unsigned long trunc_len = 0;
 unsigned long queue_len = 0;
 bool monitor_sw = false;
 bool monitor_hw = false;
+unsigned long filter_ifindex = 0;
+unsigned int filter_protocol = 0;
 
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_packet_alert_msg(struct netlink_message *msg, int err);
@@ -435,23 +438,37 @@ out_free:
 	free_netlink_msg(msg);
 }
 
-void print_nested_port(struct nlattr *attr, const char *dir)
+int print_nested_port(struct nlattr *attr, const char *dir)
 {
 	struct nlattr *attrs[NET_DM_ATTR_PORT_MAX + 1];
 	int err;
+	char filter_ifname[IFNAMSIZ] = {'\0'};
 
 	err = nla_parse_nested(attrs, NET_DM_ATTR_PORT_MAX, attr,
 			       net_dm_port_policy);
 	if (err)
-		return;
+		return 0;
 
-	if (attrs[NET_DM_ATTR_PORT_NETDEV_IFINDEX])
-		printf("%s port ifindex: %d\n", dir,
-		       nla_get_u32(attrs[NET_DM_ATTR_PORT_NETDEV_IFINDEX]));
+	if(filter_ifindex)
+		if_indextoname(filter_ifindex,filter_ifname);
 
-	if (attrs[NET_DM_ATTR_PORT_NETDEV_NAME])
-		printf("%s port name: %s\n", dir,
-		       nla_get_string(attrs[NET_DM_ATTR_PORT_NETDEV_NAME]));
+	if (attrs[NET_DM_ATTR_PORT_NETDEV_IFINDEX]) {
+		if((!filter_ifindex) || (filter_ifindex == nla_get_u32(attrs[NET_DM_ATTR_PORT_NETDEV_IFINDEX]))) {
+			printf("%s port ifindex: %d\n", dir,
+			    nla_get_u32(attrs[NET_DM_ATTR_PORT_NETDEV_IFINDEX]));
+			return 0;
+		}
+	}
+
+	if (attrs[NET_DM_ATTR_PORT_NETDEV_NAME]) {
+		if((!filter_ifindex) || strcmp(filter_ifname, nla_get_string(attrs[NET_DM_ATTR_PORT_NETDEV_NAME]))) {
+			printf("%s port name: %s\n", dir,
+			    nla_get_string(attrs[NET_DM_ATTR_PORT_NETDEV_NAME]));
+			return 0;
+		}
+	}
+
+	return -EPERM;
 }
 
 void print_packet_origin(struct nlattr *attr)
@@ -486,6 +503,13 @@ void handle_dm_packet_alert_msg(struct netlink_message *msg, int err)
 	if (err)
 		goto out_free;
 
+	if((filter_protocol) && (filter_protocol != nla_get_u16(attrs[NET_DM_ATTR_PROTO])))
+		goto out_free;
+
+        if (attrs[NET_DM_ATTR_IN_PORT])
+                if(print_nested_port(attrs[NET_DM_ATTR_IN_PORT], "input"))
+			goto out_free;
+
 	if (attrs[NET_DM_ATTR_PC] && attrs[NET_DM_ATTR_SYMBOL])
 		printf("drop at: %s (0x%" PRIx64 ")\n",
 		       nla_get_string(attrs[NET_DM_ATTR_SYMBOL]),
@@ -498,9 +522,6 @@ void handle_dm_packet_alert_msg(struct netlink_message *msg, int err)
 
 	if (attrs[NET_DM_ATTR_ORIGIN])
 		print_packet_origin(attrs[NET_DM_ATTR_ORIGIN]);
-
-	if (attrs[NET_DM_ATTR_IN_PORT])
-		print_nested_port(attrs[NET_DM_ATTR_IN_PORT], "input");
 
 	if (attrs[NET_DM_ATTR_FLOW_ACTION_COOKIE]) {
 		unsigned char *cookie = nla_data(attrs[NET_DM_ATTR_FLOW_ACTION_COOKIE]);
@@ -583,6 +604,12 @@ void handle_dm_config_new_msg(struct netlink_message *msg, int err)
 	       nla_get_u32(attrs[NET_DM_ATTR_TRUNC_LEN]));
 
 	printf("Queue length: %u\n", nla_get_u32(attrs[NET_DM_ATTR_QUEUE_LEN]));
+
+ 	printf("Filter settings: \n");
+	printf("\tIfindex filter: ");
+	filter_ifindex ? printf("%ld\n",filter_ifindex): printf("None\n");
+ 	printf("\tProtocol filter: ");
+	filter_protocol ? printf("0x%x\n",filter_protocol): printf("None\n");
 
 out_free:
 	state = STATE_IDLE;
@@ -839,21 +866,26 @@ int get_stats()
 void display_help()
 {
 	printf("Command Syntax:\n");
-	printf("exit\t\t\t\t - Quit dropwatch\n");
-	printf("help\t\t\t\t - Display this message\n");
+	printf("exit\t\t\t\t\t - Quit dropwatch\n");
+	printf("help\t\t\t\t\t - Display this message\n");
 	printf("set:\n");
-	printf("\talertlimit <number>\t - capture only this many alert packets\n");
-	printf("\talertmode <mode>\t - set mode to \"summary\" or \"packet\"\n");
-	printf("\ttrunc <len>\t\t - truncate packets to this length. ");
+	printf("\talertlimit <number>\t\t - capture only this many alert packets\n");
+	printf("\talertmode <mode>\t\t - set mode to \"summary\" or \"packet\"\n");
+	printf("\ttrunc <len>\t\t\t - truncate packets to this length. ");
 	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
-	printf("\tqueue <len>\t\t - queue up to this many packets in the kernel. ");
+	printf("\tqueue <len>\t\t\t - queue up to this many packets in the kernel. ");
 	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
-	printf("\tsw <true | false>\t - monitor software drops\n");
-	printf("\thw <true | false>\t - monitor hardware drops\n");
-	printf("start\t\t\t\t - start capture\n");
-	printf("stop\t\t\t\t - stop capture\n");
-	printf("show\t\t\t\t - show existing configuration\n");
-	printf("stats\t\t\t\t - show statistics\n");
+	printf("\tsw <true | false>\t\t - monitor software drops\n");
+	printf("\thw <true | false>\t\t - monitor hardware drops\n");
+        printf("\tfilter ifindex <ifindex>\t - filter only selected ifindex drops. ");
+        printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
+        printf("\tfilter protocol <hex number>\t - filter only selected protocol drops. ");
+        printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
+        printf("\tfilter clear <ifindex/protocol>\t - clear the selected filter. All filters will be cleared when no parameters are selected\n");
+	printf("start\t\t\t\t\t - start capture\n");
+	printf("stop\t\t\t\t\t - stop capture\n");
+	printf("show\t\t\t\t\t - show existing configuration\n");
+	printf("stats\t\t\t\t\t - show statistics\n");
 }
 
 void enter_command_line_mode()
@@ -935,9 +967,28 @@ void enter_command_line_mode()
 				printf("setting hardware drops monitoring to %d\n",
 				       monitor_hw);
 				goto next_input;
+			} else if (!strncmp(ninput, "filter", 6)) {
+				ninput = ninput + 7;
+				if (!strncmp(ninput, "clear", 5)) {
+					ninput = ninput + 6;
+					if (!strncmp(ninput, "ifindex", 7)) {
+						filter_ifindex = 0;
+					} else if (!strncmp(ninput, "protocol", 7)) {
+						filter_protocol = 0;
+					} else {
+						filter_ifindex = 0;
+						filter_protocol = 0;
+					}
+				} else if (!strncmp(ninput, "ifindex", 7)) {
+					filter_ifindex = strtoul(ninput+7, NULL, 10);
+					printf("setting filter ifindex to %ld\n",filter_ifindex);
+                                } else if (!strncmp(ninput, "protocol", 8)) {
+                                        filter_protocol = strtoul(ninput+8, NULL, 16);
+                                        printf("setting filter protocol to %x\n",filter_protocol);
+                                }
+				goto next_input;
 			}
 		}
-
 		if (!strncmp(input, "show", 4)) {
 			state = STATE_RQST_CONFIG;
 			break;
