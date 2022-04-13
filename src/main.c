@@ -539,6 +539,10 @@ void handle_dm_packet_alert_msg(struct netlink_message *msg, int err)
 		printf("original length: %u\n",
 		       nla_get_u32(attrs[NET_DM_ATTR_ORIG_LEN]));
 
+	if (attrs[NET_DM_ATTR_REASON])
+		printf("drop reason: %s\n",
+		       nla_get_string(attrs[NET_DM_ATTR_REASON]));
+
 	printf("\n");
 
 	acount++;
