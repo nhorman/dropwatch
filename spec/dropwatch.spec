@@ -8,8 +8,9 @@ URL: http://fedorahosted.org/dropwatch
 License: GPLv2+
 Group: Applications/System
 BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
+BuildRequires: autoconf, automake, libtool
 BuildRequires: kernel-devel, libnl-devel, readline-devel
-BuildRequires: binutils-devel, binutils-static pkgconfig
+BuildRequires: binutils-devel, binutils-static, pkgconfig
 Requires: libnl, readline
 
 %description
