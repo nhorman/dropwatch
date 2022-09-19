@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <sys/utsname.h>
 #include <string.h>
+#include <limits.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -24,8 +25,8 @@
 
 struct symbol_entry {
 	char *sym_name;
-	__u64 start;
-	__u64 end;
+	uint64_t start;
+	uint64_t end;
 	LIST_ENTRY(symbol_entry) list;
 };
 
@@ -37,7 +38,7 @@ LIST_HEAD(sym_list, symbol_entry);
 static struct sym_list sym_list_head = {NULL};
 
 
-static int lookup_kas_cache( __u64 pc, struct loc_result *location)
+static int lookup_kas_cache(uint64_t pc, struct loc_result *location)
 {
 	struct symbol_entry *sym;
 
@@ -69,28 +70,54 @@ static void kas_add_cache(__u64 start, __u64 end, char *name)
 	return;
 }
 
-static int lookup_kas_proc(__u64 pc, struct loc_result *location)
+static void kas_update_cache(__u64 start, __u64 end, char *name)
+{
+	struct symbol_entry *sym;
+	/* look for any symbol that matches our start
+ 	 * if the new end is longer than the current end, extend it
+ 	 */
+	LIST_FOREACH(sym, &sym_list_head, list) {
+		if (start == sym->start) {
+			if (end > sym->end) {
+				sym->end = end;
+			}
+			return;
+		}
+	}
+
+	/* if we get here, we didn't find a symbol, and should add it */
+	kas_add_cache(start, end, name);
+}
+
+static int lookup_kas_proc(uint64_t pc, struct loc_result *location)
 {
 	FILE *pf;
-	__u64 ppc;
-	__u64 uppc, ulpc, uipc;
-	char *name, *last_name;
+	uint64_t sppc;
+	uint64_t min_delta, sdelta;
+	uint64_t sym_base_addr;
+	char *tgt_sym = NULL;
+	char *name;
 
 	pf = fopen("/proc/kallsyms", "r");
 
 	if (!pf)
 		return 1;
 
-	last_name = NULL;
-	uipc = pc;
-	ulpc = 0;
+
+	/*
+ 	 * We need to conduct a reverse price is right search here, we need to find the symbol that is less than 
+ 	 * pc, but by the least amount. i.e. address 0xffffffff00010 is 10 more than symbol A, at 0xffffffff00000000, 
+ 	 * but is only 8 more than symbol B at 0xffffffff00000002, therefore this drop occurs at symbol B+8
+ 	 */
+	min_delta = LLONG_MAX;
+	sym_base_addr = 0;
 	while (!feof(pf)) {
 		/*
 		 * Each line of /proc/kallsyms is formatteded as:
 		 *  - "%pK %c %s\n" (for kernel internal symbols), or
 		 *  - "%pK %c %s\t[%s]\n" (for module-provided symbols)
 		 */
-		if (fscanf(pf, "%llx %*s %ms [ %*[^]] ]", (unsigned long long *)&ppc, &name) < 0) {
+		if (fscanf(pf, "%llx %*s %ms [ %*[^]] ]", (unsigned long long *)&sppc, &name) < 0) {
 			if (ferror(pf)) {
 				perror("Error Scanning File: ");
 				break;
@@ -100,30 +127,30 @@ static int lookup_kas_proc(__u64 pc, struct loc_result *location)
 			}
 		}
 
-		uppc = (__u64)ppc;
-		if ((uipc >= ulpc) &&
-		    (uipc < uppc)) {
-			/*
- 			 * The last symbol we looked at
- 			 * was a hit, record and return it
- 			 * Note that we don't free last_name
- 			 * here, because the cache is using it
- 			 */
-			kas_add_cache(ulpc, uppc-1, last_name);
-			fclose(pf);
-			free(name);
-			return lookup_kas_cache(pc, location);
+		/* don't bother with symbols that are above our target */
+		if (sppc > pc) {
+			continue;
 		}
 
-		/*
- 		 * Advance all our state holders
- 		 */
-		free(last_name);
-		last_name = name;
-		ulpc = uppc;
+		sdelta = pc - sppc;
+		if (sdelta < min_delta) {
+			min_delta = sdelta;
+			if (tgt_sym)
+				free(tgt_sym);
+			tgt_sym = strdup(name);
+			sym_base_addr = sppc;
+		}
+		free(name);
 	}
 
 	fclose(pf);
+
+	if (sym_base_addr) {
+		kas_update_cache(sym_base_addr, sym_base_addr + min_delta, tgt_sym);
+		location->symbol = tgt_sym;
+		location->offset = min_delta;
+		return 0;
+	}
 	return 1;
 }
 
@@ -140,8 +167,9 @@ static int lookup_kas_sym(void *pc, struct loc_result *location)
 
 	pcv = (uintptr_t)pc;
 
-	if (!lookup_kas_cache(pcv, location))
+	if (!lookup_kas_cache(pcv, location)) {
 		return 0;
+	}
 
 	return lookup_kas_proc(pcv, location);
 }
