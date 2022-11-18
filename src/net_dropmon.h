@@ -13,6 +13,7 @@
 struct net_dm_drop_point {
 	__u8 pc[8];
 	__u32 count;
+	__u32 ns_id;
 };
 
 #define NET_DM_CFG_VERSION  0
@@ -92,6 +93,8 @@ enum net_dm_attr {
 	NET_DM_ATTR_HW_DROPS,			/* flag */
 	NET_DM_ATTR_FLOW_ACTION_COOKIE,		/* binary */
 	NET_DM_ATTR_REASON,			/* string */
+	NET_DM_ATTR_NS,				/* u32 */
+	NET_DM_ATTR_HW_NS,			/* u32 */
 
 	__NET_DM_ATTR_MAX,
 	NET_DM_ATTR_MAX = __NET_DM_ATTR_MAX - 1

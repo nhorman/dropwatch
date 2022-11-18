@@ -31,7 +31,7 @@
 #include "lookup.h"
 
 /*
- * This is just in place until the kernel changes get committed 
+ * This is just in place until the kernel changes get committed
  */
 #ifndef NETLINK_DRPMON
 #define NETLINK_DRPMON 20
@@ -54,8 +54,11 @@ unsigned long alimit = 0;
 unsigned long acount = 0;
 unsigned long trunc_len = 0;
 unsigned long queue_len = 0;
+unsigned long ns_id = 0;
 bool monitor_sw = false;
 bool monitor_hw = false;
+bool show_ns = false;
+
 
 void handle_dm_alert_msg(struct netlink_message *msg, int err);
 void handle_dm_packet_alert_msg(struct netlink_message *msg, int err);
@@ -102,6 +105,8 @@ enum {
 	STATE_CONFIG_GETTING,
 	STATE_RQST_STATS,
 	STATE_STATS_GETTING,
+	STATE_RQST_NS,
+	STATE_NS_SETTING,
 };
 
 static int state = STATE_IDLE;
@@ -117,6 +122,7 @@ static struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
 	[NET_DM_ATTR_TRUNC_LEN]			= { .type = NLA_U32 },
 	[NET_DM_ATTR_ORIG_LEN]			= { .type = NLA_U32 },
 	[NET_DM_ATTR_QUEUE_LEN]			= { .type = NLA_U32 },
+	[NET_DM_ATTR_NS]			= { .type = NLA_U32 },
 	[NET_DM_ATTR_STATS]			= { .type = NLA_NESTED },
 	[NET_DM_ATTR_HW_STATS]			= { .type = NLA_NESTED },
 	[NET_DM_ATTR_ORIGIN]			= { .type = NLA_U16 },
@@ -125,6 +131,7 @@ static struct nla_policy net_dm_policy[NET_DM_ATTR_MAX + 1] = {
 	[NET_DM_ATTR_HW_ENTRIES]		= { .type = NLA_NESTED },
 	[NET_DM_ATTR_HW_ENTRY]			= { .type = NLA_NESTED },
 	[NET_DM_ATTR_HW_TRAP_COUNT]		= { .type = NLA_U32 },
+	[NET_DM_ATTR_HW_NS]		= { .type = NLA_U32 },
 };
 
 static struct nla_policy net_dm_port_policy[NET_DM_ATTR_PORT_MAX + 1] = {
@@ -368,12 +375,18 @@ void print_nested_hw_entry(struct nlattr *hw_entry)
 		return;
 
 	if (!attrs[NET_DM_ATTR_HW_TRAP_NAME] ||
-	    !attrs[NET_DM_ATTR_HW_TRAP_COUNT])
+	    !attrs[NET_DM_ATTR_HW_TRAP_COUNT] ||
+		(show_ns && !attrs[NET_DM_ATTR_HW_NS]))
 		return;
 
-	printf("%d drops at %s [hardware]\n",
+	printf("%d drops at %s [hardware]",
 	       nla_get_u32(attrs[NET_DM_ATTR_HW_TRAP_COUNT]),
 	       nla_get_string(attrs[NET_DM_ATTR_HW_TRAP_NAME]));
+	if (show_ns) {
+		printf(" [ns: %u]\n", nla_get_u32(attrs[NET_DM_ATTR_HW_NS]));
+	} else {
+		printf("\n");
+	}
 }
 
 void print_nested_hw_entries(struct nlattr *hw_entries)
@@ -417,10 +430,15 @@ void handle_dm_alert_msg(struct netlink_message *msg, int err)
 		void *location;
 		memcpy(&location, alert->points[i].pc, sizeof(void *));
 		if (lookup_symbol(location, &res))
-			printf ("%d drops at location %p [software]\n", alert->points[i].count, location);
+			printf ("%d drops at location %p [software] ", alert->points[i].count, location);
 		else
-			printf ("%d drops at %s+%llx (%p) [software]\n",
+			printf ("%d drops at %s+%llx (%p) [software] ",
 				alert->points[i].count, res.symbol, (unsigned long long)res.offset, location);
+		if (show_ns) {
+			printf("[ns: %u]\n", alert->points[i].ns_id);
+		} else {
+			printf("\n");
+		}
 		acount++;
 		if (alimit && (acount == alimit)) {
 			printf("Alert limit reached, deactivating!\n");
@@ -657,6 +675,10 @@ void handle_dm_config_msg(struct netlink_message *amsg, struct netlink_message *
 		printf("Queue length successfully set\n");
 		state = STATE_IDLE;
 		break;
+	case STATE_NS_SETTING:
+		printf("Ns id successfully set\n");
+		state = STATE_IDLE;
+		break;
 	default:
 		printf("Received acknowledgement for non-solicited config request\n");
 		state = STATE_FAILED;
@@ -818,6 +840,27 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
+
+int set_ns()
+{
+	struct netlink_message *msg;
+
+	msg = alloc_netlink_msg(NET_DM_CMD_CONFIG, NLM_F_REQUEST|NLM_F_ACK, 0);
+	if (!msg)
+		return -ENOMEM;
+
+	if (nla_put_u32(msg->nlbuf, NET_DM_ATTR_NS, ns_id))
+		goto nla_put_failure;
+
+	set_ack_cb(msg, handle_dm_config_msg);
+
+	return send_netlink_message(msg);
+
+nla_put_failure:
+	free_netlink_msg(msg);
+	return -EMSGSIZE;
+}
+
 int get_config()
 {
 	struct netlink_message *msg;
@@ -851,9 +894,10 @@ void display_help()
 	printf("\ttrunc <len>\t\t - truncate packets to this length. ");
 	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
 	printf("\tqueue <len>\t\t - queue up to this many packets in the kernel. ");
-	printf("Only applicable when \"alertmode\" is set to \"packet\"\n");
+	printf("Only applicable when \"alertmode\" is set to \"summary\"\n");
 	printf("\tsw <true | false>\t - monitor software drops\n");
 	printf("\thw <true | false>\t - monitor hardware drops\n");
+	printf("\tns [off | 0 | inum>\t - show/filter based on net namespace inum\n");
 	printf("start\t\t\t\t - start capture\n");
 	printf("stop\t\t\t\t - stop capture\n");
 	printf("show\t\t\t\t - show existing configuration\n");
@@ -939,6 +983,15 @@ void enter_command_line_mode()
 				printf("setting hardware drops monitoring to %d\n",
 				       monitor_hw);
 				goto next_input;
+			} else if (!strncmp(ninput, "ns", 2)) {
+				if (!strncmp(ninput + 3, "off", 3)) {
+					show_ns = false;
+				} else {
+					show_ns = true;
+					ns_id = strtoul(ninput + 3, NULL, 10);
+					state = STATE_RQST_NS;
+				}
+				break;
 			}
 		}
 
@@ -1040,6 +1093,18 @@ void enter_state_loop(void)
 			break;
 		case STATE_QUEUE_LEN_SETTING:
 			printf("Waiting for queue length setting ack...\n");
+			break;
+		case STATE_RQST_NS:
+			if (set_ns() < 0) {
+				perror("Failed to set ns");
+				state = STATE_FAILED;
+			} else {
+				state = STATE_NS_SETTING;
+				should_rx = 1;
+			}
+			break;
+		case STATE_NS_SETTING:
+			printf("Waiting for ns setting ack...\n");
 			break;
 		case STATE_RQST_CONFIG:
 			printf("Getting existing configuration\n");
