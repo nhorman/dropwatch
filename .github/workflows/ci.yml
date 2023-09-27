@@ -1,0 +1,37 @@
+name: CI Build
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+  # Allow manual trigger from Actions tab
+  workflow_dispatch:
+
+jobs:
+  build_and_test:
+    name: Configure, build, and test
+
+    strategy:
+      matrix:
+        platform:
+          - ubuntu-20.04
+          - ubuntu-22.04
+        compiler:
+          - gcc
+          - clang
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install dependencies
+        run: sudo apt-get install -y binutils-dev libreadline-dev libnl-3-dev libnl-genl-3-dev libpcap-dev
+      - name: Configure and build
+        run: ./autogen.sh && ./configure && make
+        env:
+          CC: ${{ matrix.compiler }}
+      - name: Run tests
+        run: make check
+        env:
+          CC: ${{ matrix.compiler }}
