@@ -36,4 +36,4 @@ RUN apt update \
 
 COPY --from=build_stage /dropwatch/src/dropwatch /dropwatch/dropwatch
 
-CMD /dropwatch/dropwatch
+CMD /dropwatch/dropwatch -l kas
