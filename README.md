@@ -47,6 +47,13 @@ make
 make install
 ```
 
+Building and using Dropwatch in Docker
+------------------
+```
+docker build -t dropwatch .
+docker run -it --rm -v /usr/src:/usr/src:ro -v /lib/modules/:/lib/modules:ro -v /sys/:/sys/:rw --net=host --pid=host --privileged dropwatch
+```
+
 Questions
 ---------
 Feel free to email me directly at nhorman@tuxdriver.com with question, or if you
