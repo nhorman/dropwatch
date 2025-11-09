@@ -56,6 +56,6 @@ docker run -it --rm -v /usr/src:/usr/src:ro -v /lib/modules/:/lib/modules:ro -v 
 
 Questions
 ---------
-Feel free to email me directly at nhorman@tuxdriver.com with question, or if you
+Feel free to email me directly at nhorman@openssl.org with questions, or if you
 find a bug, open an issue here on the github page
 
